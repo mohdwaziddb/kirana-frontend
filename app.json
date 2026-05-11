@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "KiranaApp",
+    "slug": "KiranaApp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.kiranastore.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "metro": {
+        "transformer": {
+          "hermesParser": false
+        }
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c398c64f-3e77-4392-888d-f156fb439780"
+      }
+    }
+  }
+}

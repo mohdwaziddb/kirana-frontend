@@ -1,0 +1,150 @@
+import { View, Text, TouchableOpacity, Image } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
+
+export default function ImageUploadCard({ image, setImage, onUpload }) {
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    let result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+      allowsEditing: true,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>📷 Upload Image</Text>
+        <Text style={styles.subtitle}>Scan items from image</Text>
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity 
+          onPress={pickImage} 
+          style={[styles.button, styles.galleryButton]}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.buttonText}>📷 Gallery</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          onPress={takePhoto} 
+          style={[styles.button, styles.cameraButton]}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.buttonText}>📸 Camera</Text>
+        </TouchableOpacity>
+      </View>
+
+      {image && (
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: image }} style={styles.image} />
+          <Text style={styles.imageText}>Image selected</Text>
+        </View>
+      )}
+
+      <TouchableOpacity 
+        onPress={onUpload} 
+        style={[styles.uploadButton, !image && styles.uploadButtonDisabled]}
+        disabled={!image}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.uploadButtonText}>🔍 Scan Image</Text>
+      </TouchableOpacity>
+
+    </View>
+  );
+}
+
+const styles = {
+  container: {
+    backgroundColor: COLORS.WHITE,
+    borderRadius: SIZES.RADIUS_LG,
+    padding: SIZES.PADDING_LG,
+    marginBottom: SIZES.MARGIN_BASE,
+    ...SHADOWS.MEDIUM,
+  },
+  header: {
+    marginBottom: SIZES.MARGIN_BASE,
+  },
+  title: {
+    fontSize: SIZES.FONT_LG,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SIZES.MARGIN_XS,
+  },
+  subtitle: {
+    fontSize: SIZES.FONT_SM,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.MARGIN_BASE,
+  },
+  button: {
+    flex: 1,
+    padding: SIZES.PADDING_BASE,
+    borderRadius: SIZES.RADIUS_BASE,
+    alignItems: 'center',
+    ...SHADOWS.SMALL,
+  },
+  galleryButton: {
+    backgroundColor: COLORS.SECONDARY,
+  },
+  cameraButton: {
+    backgroundColor: COLORS.PRIMARY,
+  },
+  buttonText: {
+    color: COLORS.WHITE,
+    fontSize: SIZES.FONT_BASE,
+    fontWeight: FONTS.SEMIBOLD,
+  },
+  imageContainer: {
+    marginBottom: SIZES.MARGIN_BASE,
+    alignItems: 'center',
+  },
+  image: {
+    width: '100%',
+    height: 150,
+    borderRadius: SIZES.RADIUS_BASE,
+    backgroundColor: COLORS.BACKGROUND,
+  },
+  imageText: {
+    fontSize: SIZES.FONT_SM,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: SIZES.MARGIN_XS,
+  },
+  uploadButton: {
+    backgroundColor: COLORS.ACCENT,
+    padding: SIZES.PADDING_BASE,
+    borderRadius: SIZES.RADIUS_BASE,
+    alignItems: 'center',
+    ...SHADOWS.SMALL,
+  },
+  uploadButtonDisabled: {
+    backgroundColor: COLORS.GRAY,
+    opacity: 0.6,
+  },
+  uploadButtonText: {
+    color: COLORS.WHITE,
+    fontSize: SIZES.FONT_BASE,
+    fontWeight: FONTS.BOLD,
+  },
+};
