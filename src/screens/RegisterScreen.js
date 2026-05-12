@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, StatusBar, 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ErrorPopup from "../components/ErrorPopup";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
+import { BASE_URL } from "../services/baseUrl";
 
 export default function RegisterScreen({ navigation, onLogin }) {
   const [name, setName] = useState("");
@@ -77,7 +78,7 @@ export default function RegisterScreen({ navigation, onLogin }) {
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:9001/api/auth/register", {
+      const response = await fetch(`${BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -92,7 +93,7 @@ export default function RegisterScreen({ navigation, onLogin }) {
         
         // Auto-login after successful registration
         try {
-          const loginResponse = await fetch("http://127.0.0.1:9001/api/auth/login", {
+          const loginResponse = await fetch(`${BASE_URL}/api/auth/login`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView,
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
+import { BASE_URL } from "../services/baseUrl";
 
 export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
   const [name, setName] = useState(user.name);
@@ -43,7 +44,9 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
 
   
   const handleUpdateProfile = async () => {
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
       Alert.alert("Error", "Name cannot be empty");
       return;
     }
@@ -51,7 +54,7 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem("token");
-      const response = await fetch("http://127.0.0.1:9001/api/auth/update-profile", {
+      const response = await fetch(`${BASE_URL}/api/auth/update-profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -64,8 +67,18 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
 
       if (response.ok) {
         // Update local user data
-        const updatedUser = { ...user, name };
+        const storedUserStr = await AsyncStorage.getItem("user");
+        const storedUser = storedUserStr ? JSON.parse(storedUserStr) : {};
+        const serverUser = data.user || data;
+        const updatedUser = {
+          ...storedUser,
+          ...user,
+          ...serverUser,
+          name: trimmedName,
+        };
+
         await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+        setName(trimmedName);
         
         if (onUpdateUser && typeof onUpdateUser === 'function') {
           onUpdateUser(updatedUser);
@@ -108,7 +121,7 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
     try {
       const token = await AsyncStorage.getItem("token");
       
-      const response = await fetch("http://127.0.0.1:9001/api/auth/change-password", {
+      const response = await fetch(`${BASE_URL}/api/auth/change-password`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

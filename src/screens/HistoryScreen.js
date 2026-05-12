@@ -1,12 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Modal, StyleSheet, ScrollView, Alert } from 'react-native';
 import { getUserHistory, getHistoryById } from '../services/historyApi';
 import { COLORS, SIZES, FONTS, SHADOWS } from '../constants/theme';
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function HistoryScreen({ user }) {
   const [historyList, setHistoryList] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
   //hello
 
@@ -49,8 +69,213 @@ export default function HistoryScreen({ user }) {
     return `${day}-${month}-${year} ${hours}:${minutes}`;
   };
 
+  const formatFilterDate = (date) => {
+    if (!date) return 'Select date';
+
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
+  const getDateKey = (date) => {
+    const parsedDate = date instanceof Date ? date : new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return '';
+    }
+
+    const year = parsedDate.getFullYear();
+    const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(parsedDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const filteredHistoryList = useMemo(() => {
+    if (!selectedDate) return historyList;
+
+    const selectedDateKey = getDateKey(selectedDate);
+    return historyList.filter((historyItem) => getDateKey(historyItem.timestamp) === selectedDateKey);
+  }, [historyList, selectedDate]);
+
+  const openCalendar = () => {
+    setCalendarMonth(selectedDate || new Date());
+    setCalendarVisible(true);
+  };
+
+  const changeCalendarMonth = (amount) => {
+    setCalendarMonth((currentMonth) => (
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + amount, 1)
+    ));
+  };
+
+  const getCalendarDays = () => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const calendarDays = [];
+
+    for (let index = 0; index < firstDayOfMonth; index += 1) {
+      calendarDays.push(null);
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      calendarDays.push(day);
+    }
+
+    while (calendarDays.length % 7 !== 0) {
+      calendarDays.push(null);
+    }
+
+    return calendarDays;
+  };
+
+  const handleDateSelect = (day) => {
+    if (!day) return;
+
+    setSelectedDate(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day));
+    setCalendarVisible(false);
+  };
+
   const calculateGrandTotal = (items) => {
     return items.reduce((sum, item) => sum + (item.total || 0), 0);
+  };
+
+  const renderDateFilter = () => (
+    <View style={styles.filterContainer}>
+      <View style={styles.filterSummary}>
+        <Text style={styles.filterLabel}>Filter by date</Text>
+        <Text style={styles.filterCount}>
+          Showing {filteredHistoryList.length} of {historyList.length} records
+        </Text>
+      </View>
+
+      <View style={styles.filterActions}>
+        <TouchableOpacity
+          style={styles.dateButton}
+          onPress={openCalendar}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.dateButtonText}>{formatFilterDate(selectedDate)}</Text>
+        </TouchableOpacity>
+
+        {selectedDate ? (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => setSelectedDate(null)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.clearButtonText}>Clear</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  const renderCalendarModal = () => {
+    const calendarDays = getCalendarDays();
+    const selectedDateKey = selectedDate ? getDateKey(selectedDate) : '';
+    const todayKey = getDateKey(new Date());
+
+    return (
+      <Modal
+        visible={calendarVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setCalendarVisible(false)}
+      >
+        <View style={styles.calendarOverlay}>
+          <View style={styles.calendarCard}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity
+                style={styles.monthButton}
+                onPress={() => changeCalendarMonth(-1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.monthButtonText}>{'<'}</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.calendarTitle}>
+                {MONTH_NAMES[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.monthButton}
+                onPress={() => changeCalendarMonth(1)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.monthButtonText}>{'>'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekRow}>
+              {WEEK_DAYS.map((weekDay) => (
+                <Text key={weekDay} style={styles.weekDayText}>{weekDay}</Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {calendarDays.map((day, index) => {
+                const dayDate = day
+                  ? new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day)
+                  : null;
+                const dayKey = dayDate ? getDateKey(dayDate) : '';
+                const isSelected = dayKey === selectedDateKey;
+                const isToday = dayKey === todayKey;
+
+                return (
+                  <TouchableOpacity
+                    key={`${day || 'blank'}-${index}`}
+                    style={[
+                      styles.dayButton,
+                      isToday && styles.todayButton,
+                      isSelected && styles.selectedDayButton,
+                    ]}
+                    onPress={() => handleDateSelect(day)}
+                    disabled={!day}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.dayButtonText,
+                        isToday && styles.todayButtonText,
+                        isSelected && styles.selectedDayButtonText,
+                      ]}
+                    >
+                      {day || ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.calendarFooter}>
+              <TouchableOpacity
+                style={styles.calendarCancelButton}
+                onPress={() => setCalendarVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              {selectedDate ? (
+                <TouchableOpacity
+                  style={styles.calendarClearButton}
+                  onPress={() => {
+                    setSelectedDate(null);
+                    setCalendarVisible(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.calendarClearText}>Clear filter</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   const renderHistoryItem = ({ item }) => (
@@ -158,15 +383,28 @@ export default function HistoryScreen({ user }) {
           <Text style={styles.emptyText}>No history found</Text>
           <Text style={styles.emptySubtext}>Start saving or sharing tables to see them here</Text>
         </View>
+      ) : filteredHistoryList.length === 0 ? (
+        <>
+          {renderDateFilter()}
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No records for this date</Text>
+            <Text style={styles.emptySubtext}>Choose another date or clear the filter</Text>
+          </View>
+        </>
       ) : (
-        <FlatList
-          data={historyList}
-          renderItem={renderHistoryItem}
-          keyExtractor={(item) => item.id.toString()}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContainer}
-        />
+        <>
+          {renderDateFilter()}
+          <FlatList
+            data={filteredHistoryList}
+            renderItem={renderHistoryItem}
+            keyExtractor={(item) => item.id.toString()}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContainer}
+          />
+        </>
       )}
+
+      {renderCalendarModal()}
 
       <Modal
         visible={modalVisible}
@@ -208,6 +446,64 @@ const styles = StyleSheet.create({
     fontSize: SIZES.FONT_SM,
     color: COLORS.TEXT_SECONDARY,
     marginTop: SIZES.MARGIN_XS,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.WHITE,
+    paddingHorizontal: SIZES.PADDING_BASE,
+    paddingVertical: SIZES.PADDING_SM,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER,
+  },
+  filterSummary: {
+    flex: 1,
+    marginRight: SIZES.MARGIN_SM,
+  },
+  filterLabel: {
+    fontSize: SIZES.FONT_BASE,
+    fontWeight: FONTS.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  filterCount: {
+    fontSize: SIZES.FONT_XS,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: 2,
+  },
+  filterActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  dateButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_FOCUS,
+    borderRadius: SIZES.RADIUS_BASE,
+    paddingHorizontal: SIZES.PADDING_SM,
+    backgroundColor: COLORS.PRIMARY + '08',
+  },
+  dateButtonText: {
+    fontSize: SIZES.FONT_SM,
+    fontWeight: FONTS.SEMIBOLD,
+    color: COLORS.PRIMARY,
+  },
+  clearButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    marginLeft: SIZES.MARGIN_SM,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+    borderRadius: SIZES.RADIUS_BASE,
+    paddingHorizontal: SIZES.PADDING_SM,
+    backgroundColor: COLORS.WHITE,
+  },
+  clearButtonText: {
+    fontSize: SIZES.FONT_SM,
+    fontWeight: FONTS.SEMIBOLD,
+    color: COLORS.TEXT_SECONDARY,
   },
   listContainer: {
     padding: SIZES.PADDING_BASE,
@@ -260,6 +556,115 @@ const styles = StyleSheet.create({
     fontSize: SIZES.FONT_BASE,
     color: COLORS.TEXT_SECONDARY,
     textAlign: 'center',
+  },
+  calendarOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    padding: SIZES.PADDING_LG,
+  },
+  calendarCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: COLORS.WHITE,
+    borderRadius: SIZES.RADIUS_LG,
+    padding: SIZES.PADDING_BASE,
+    ...SHADOWS.LARGE,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SIZES.MARGIN_BASE,
+  },
+  calendarTitle: {
+    fontSize: SIZES.FONT_LG,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  monthButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: SIZES.RADIUS_BASE,
+    backgroundColor: COLORS.GRAY_100,
+  },
+  monthButtonText: {
+    fontSize: SIZES.FONT_LG,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    marginBottom: SIZES.MARGIN_XS,
+  },
+  weekDayText: {
+    width: `${100 / 7}%`,
+    textAlign: 'center',
+    fontSize: SIZES.FONT_XS,
+    fontWeight: FONTS.SEMIBOLD,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  dayButton: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: SIZES.RADIUS_BASE,
+  },
+  todayButton: {
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY_LIGHT,
+  },
+  selectedDayButton: {
+    backgroundColor: COLORS.PRIMARY,
+  },
+  dayButtonText: {
+    fontSize: SIZES.FONT_SM,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  todayButtonText: {
+    fontWeight: FONTS.BOLD,
+    color: COLORS.PRIMARY,
+  },
+  selectedDayButtonText: {
+    fontWeight: FONTS.BOLD,
+    color: COLORS.WHITE,
+  },
+  calendarFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: SIZES.MARGIN_BASE,
+  },
+  calendarCancelButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: SIZES.PADDING_SM,
+  },
+  calendarCancelText: {
+    fontSize: SIZES.FONT_SM,
+    fontWeight: FONTS.SEMIBOLD,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  calendarClearButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    marginLeft: SIZES.MARGIN_SM,
+    borderRadius: SIZES.RADIUS_BASE,
+    paddingHorizontal: SIZES.PADDING_SM,
+    backgroundColor: COLORS.GRAY_100,
+  },
+  calendarClearText: {
+    fontSize: SIZES.FONT_SM,
+    fontWeight: FONTS.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
   },
   modalContent: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { ScrollView, Text, View, StyleSheet, StatusBar, Animated, Dimensions } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { processTextAPI } from "../services/textApi";
@@ -19,12 +19,23 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
   const [showResult, setShowResult] = useState(false);
   const [extractedText, setExtractedText] = useState(""); // 🔥 Store raw OCR text
 
+  const mergeUserData = (nextUser) => {
+    if (!nextUser) return;
+
+    setUser((currentUser) => {
+      const mergedUser = {
+        ...(currentUser || {}),
+        ...nextUser,
+      };
+
+      return JSON.stringify(mergedUser) === JSON.stringify(currentUser) ? currentUser : mergedUser;
+    });
+  };
+
   // Update user state when initialUser prop changes
   useEffect(() => {
-    if (initialUser && initialUser !== user) {
-      setUser(initialUser);
-    }
-  }, [initialUser, user]);
+    mergeUserData(initialUser);
+  }, [initialUser]);
 
   // Listen for user changes from AsyncStorage (for profile updates)
   useEffect(() => {
@@ -33,9 +44,7 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
         const userStr = await AsyncStorage.getItem("user");
         if (userStr) {
           const userData = JSON.parse(userStr);
-          if (userData && userData.name !== user?.name) {
-                        setUser(userData);
-          }
+          mergeUserData(userData);
         }
       } catch (error) {
         console.error("Error checking user update:", error);
@@ -47,21 +56,10 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
     const interval = setInterval(checkUserUpdate, 2000);
 
     return () => clearInterval(interval);
-  }, [user?.name]);
+  }, []);
 
   // Use the prop onUpdateUser if available, otherwise use local handler
-  const updateUserHandler = onUpdateUser || ((updatedUser) => {
-    setUser(updatedUser);
-  });
-
-  // Fallback if user is null
-  if (!user) {
-    return (
-      <View style={styles.fallbackContainer}>
-        <Text style={styles.fallbackText}>Loading user data...</Text>
-      </View>
-    );
-  }
+  const updateUserHandler = onUpdateUser || mergeUserData;
 
   const handleText = async () => {
     if (!input.trim()) {
@@ -89,8 +87,8 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
   };
 
   // Animation values
-  const fadeAnim = new Animated.Value(0);
-  const slideAnim = new Animated.Value(-50);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(-50)).current;
 
   // Start animations on mount
   React.useEffect(() => {
@@ -107,6 +105,17 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
       }),
     ]).start();
   }, []);
+
+  // Fallback if user is null
+  if (!user) {
+    return (
+      <View style={styles.fallbackContainer}>
+        <Text style={styles.fallbackText}>Loading user data...</Text>
+      </View>
+    );
+  }
+
+  const userRole = user?.role || 'BUYER';
 
   return (
     <View style={styles.container}>
@@ -142,14 +151,14 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
           </View>
           
           <View style={[styles.roleBadge, { 
-            backgroundColor: user?.role === 'BUYER' ? COLORS.SECONDARY + '20' : COLORS.ACCENT + '20',
+            backgroundColor: userRole === 'BUYER' ? COLORS.SECONDARY + '20' : COLORS.ACCENT + '20',
             borderWidth: 1,
-            borderColor: user?.role === 'BUYER' ? COLORS.SECONDARY + '50' : COLORS.ACCENT + '50'
+            borderColor: userRole === 'BUYER' ? COLORS.SECONDARY + '50' : COLORS.ACCENT + '50'
           }]}>
             <Text style={[styles.roleText, { 
-              color: user?.role === 'BUYER' ? COLORS.SECONDARY : COLORS.ACCENT
+              color: userRole === 'BUYER' ? COLORS.SECONDARY : COLORS.ACCENT
             }]}>
-              {user?.role === 'BUYER' ? '🛍️ Shopper' : '🏪 Vendor'}
+              {userRole === 'BUYER' ? '🛍️ Shopper' : '🏪 Vendor'}
             </Text>
           </View>
         </Animated.View>
@@ -188,7 +197,7 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
           onUpload={handleImage}
         />
 
-        <EditableTable data={items} userId={user?.id} />
+        <EditableTable data={items} userId={user?.id} onUpdateUser={updateUserHandler} />
 
       </ScrollView>
     </View>

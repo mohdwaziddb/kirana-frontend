@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, StatusBar, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ErrorPopup from "../components/ErrorPopup";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
+import { BASE_URL } from "../services/baseUrl";
 
 export default function LoginScreen({ navigation, onLogin }) {
   const [identifier, setIdentifier] = useState("");
@@ -19,7 +20,7 @@ export default function LoginScreen({ navigation, onLogin }) {
     setLoading(true);
     try {
             
-      const response = await fetch("http://127.0.0.1:9001/api/auth/login", {
+      const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -69,7 +70,12 @@ export default function LoginScreen({ navigation, onLogin }) {
         <Text style={styles.subtitle}>Welcome back! Login to continue</Text>
       </View>
 
-      <View style={styles.formContainer}>
+      <ScrollView
+        style={styles.formContainer}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>Email, Username, or Mobile</Text>
           <TextInput
@@ -115,7 +121,7 @@ export default function LoginScreen({ navigation, onLogin }) {
             <Text style={styles.registerButtonText}>📝 Create New Account</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
       
       <ErrorPopup
         visible={errorPopup.visible}
@@ -132,11 +138,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.BACKGROUND,
   },
   header: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    paddingTop: SIZES.PADDING_2XL,
     paddingHorizontal: SIZES.PADDING_XL,
-    paddingBottom: SIZES.PADDING_2XL,
+    paddingBottom: SIZES.PADDING_XL,
   },
   logoContainer: {
     marginBottom: SIZES.MARGIN_XL,
@@ -171,9 +176,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.WHITE,
     borderTopLeftRadius: SIZES.RADIUS_2XL,
     borderTopRightRadius: SIZES.RADIUS_2XL,
+    ...SHADOWS.LARGE,
+  },
+  scrollContent: {
     paddingHorizontal: SIZES.PADDING_XL,
     paddingTop: SIZES.PADDING_2XL,
-    ...SHADOWS.LARGE,
+    paddingBottom: SIZES.PADDING_2XL,
   },
   inputContainer: {
     marginBottom: SIZES.MARGIN_LG,
