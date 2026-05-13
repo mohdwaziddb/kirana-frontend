@@ -1,17 +1,17 @@
 export const COLORS = {
   // Primary Colors
-  PRIMARY: '#2563EB',
-  PRIMARY_DARK: '#1D4ED8',
-  PRIMARY_LIGHT: '#3B82F6',
+  PRIMARY: '#315CFF',
+  PRIMARY_DARK: '#1E3A8A',
+  PRIMARY_LIGHT: '#6D8BFF',
   
   // Secondary Colors
-  SECONDARY: '#10B981',
-  SECONDARY_DARK: '#059669',
-  SECONDARY_LIGHT: '#34D399',
+  SECONDARY: '#0EA5A4',
+  SECONDARY_DARK: '#0F766E',
+  SECONDARY_LIGHT: '#5EEAD4',
   
   // Accent Colors
-  ACCENT: '#F59E0B',
-  ACCENT_DARK: '#D97706',
+  ACCENT: '#F97316',
+  ACCENT_DARK: '#EA580C',
   
   // Neutral Colors
   WHITE: '#FFFFFF',
@@ -34,7 +34,7 @@ export const COLORS = {
   INFO: '#3B82F6',
   
   // Background Colors
-  BACKGROUND: '#F9FAFB',
+  BACKGROUND: '#F4F7FB',
   CARD_BACKGROUND: '#FFFFFF',
   INPUT_BACKGROUND: '#FFFFFF',
   
@@ -45,8 +45,8 @@ export const COLORS = {
   TEXT_WHITE: '#FFFFFF',
   
   // Border Colors
-  BORDER: '#E5E7EB',
-  BORDER_FOCUS: '#3B82F6',
+  BORDER: '#DDE5F0',
+  BORDER_FOCUS: '#315CFF',
   BORDER_ERROR: '#EF4444',
 };
 
@@ -81,6 +81,7 @@ export const SIZES = {
   RADIUS_BASE: 8,
   RADIUS_LG: 12,
   RADIUS_XL: 16,
+  RADIUS_2XL: 24,
   RADIUS_FULL: 9999,
   
   // Heights
@@ -112,17 +113,17 @@ export const SHADOWS = {
     elevation: 2,
   },
   MEDIUM: {
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
     elevation: 4,
   },
   LARGE: {
-    shadowColor: '#000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
     elevation: 8,
   },
 };

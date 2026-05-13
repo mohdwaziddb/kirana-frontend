@@ -8,13 +8,23 @@ import html2canvas from 'html2canvas';
 import { saveTableHistory } from '../services/historyApi';
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 
-export default function EditableTable({ data, userId }) {
+export default function EditableTable({ data, userId, storeName }) {
 
   const [items, setItems] = useState([{ name: "", quantity: "1", price: "0", total: 0, matched: false }]);
   const tableRef = useRef(null);
 
+  const getShareFileName = () => {
+    const safeStoreName = (storeName || 'store')
+      .trim()
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase();
+
+    return `${safeStoreName || 'store'}-item-list.png`;
+  };
+
   useEffect(() => {
-    if (data && data.length > 0) {
+    if (Array.isArray(data) && data.length > 0) {
       setItems(data);
     }
   }, [data]);
@@ -128,18 +138,52 @@ export default function EditableTable({ data, userId }) {
           logging: false,
         });
 
-        // Convert canvas to blob and download
-        canvas.toBlob((blob) => {
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = 'item-list.png';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-          Alert.alert('Success', 'Table image downloaded successfully!');
+        // Convert canvas to blob, download it, then open the browser share sheet when available.
+        const blob = await new Promise((resolve, reject) => {
+          canvas.toBlob((result) => {
+            if (result) {
+              resolve(result);
+            } else {
+              reject(new Error('Could not create image file'));
+            }
+          }, 'image/png');
         });
+
+        const fileName = getShareFileName();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        if (navigator.share && typeof File !== 'undefined') {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          const shareData = {
+            title: `${storeName || 'Store'} Item List`,
+            text: `${storeName || 'Store'} item list`,
+            files: [file],
+          };
+
+          if (!navigator.canShare || navigator.canShare(shareData)) {
+            try {
+              await navigator.share(shareData);
+              Alert.alert('Success', 'Image downloaded and share option opened successfully!');
+            } catch (shareError) {
+              if (shareError?.name === 'AbortError') {
+                Alert.alert('Downloaded', 'Image downloaded. Share was cancelled.');
+              } else {
+                Alert.alert('Downloaded', 'Image downloaded, but this browser could not share it directly.');
+              }
+            }
+          } else {
+            Alert.alert('Downloaded', 'Image downloaded. This browser does not support direct image sharing.');
+          }
+        } else {
+          Alert.alert('Downloaded', 'Image downloaded. Direct sharing is not supported in this browser.');
+        }
       } else {
         // Mobile platform - use react-native-view-shot
         const uri = await captureRef(tableRef, {
@@ -159,7 +203,7 @@ export default function EditableTable({ data, userId }) {
         
         // Share the image
         const options = {
-          title: 'Share Item List',
+          title: `${storeName || 'Store'} Item List`,
           url: uri,
           type: 'image/png',
         };
@@ -275,9 +319,11 @@ export default function EditableTable({ data, userId }) {
 const styles = {
   container: {
     backgroundColor: COLORS.WHITE,
-    borderRadius: SIZES.RADIUS_LG,
-    padding: SIZES.PADDING_LG,
+    borderRadius: SIZES.RADIUS_2XL,
+    padding: SIZES.PADDING_XL,
     marginTop: SIZES.MARGIN_BASE,
+    borderWidth: 1,
+    borderColor: '#E8EEF8',
     ...SHADOWS.MEDIUM,
   },
   header: {
@@ -297,9 +343,9 @@ const styles = {
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: COLORS.PRIMARY + '10',
+    backgroundColor: COLORS.PRIMARY + '12',
     padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
     marginBottom: SIZES.MARGIN_SM,
   },
   tableHeaderText: {
@@ -317,13 +363,14 @@ const styles = {
     borderBottomWidth: 1,
     borderColor: COLORS.BORDER,
     alignItems: 'center',
+    backgroundColor: COLORS.WHITE,
   },
   tableInput: {
     borderWidth: 1,
     borderColor: COLORS.BORDER,
-    backgroundColor: COLORS.BACKGROUND,
+    backgroundColor: COLORS.GRAY_50,
     padding: SIZES.PADDING_SM,
-    borderRadius: SIZES.RADIUS_SM,
+    borderRadius: SIZES.RADIUS_BASE,
     fontSize: SIZES.FONT_SM,
     color: COLORS.TEXT_PRIMARY,
     textAlign: 'center',
@@ -343,9 +390,9 @@ const styles = {
     fontSize: SIZES.FONT_BASE,
   },
   addButton: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: COLORS.PRIMARY_DARK,
     padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
     alignItems: 'center',
     marginBottom: SIZES.MARGIN_BASE,
     ...SHADOWS.SMALL,
@@ -359,9 +406,9 @@ const styles = {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: COLORS.PRIMARY_DARK,
     padding: SIZES.PADDING_LG,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
     marginBottom: SIZES.MARGIN_BASE,
     ...SHADOWS.SMALL,
   },
@@ -377,7 +424,7 @@ const styles = {
   },
   actionButton: {
     padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
     alignItems: 'center',
     ...SHADOWS.SMALL,
   },

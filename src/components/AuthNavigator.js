@@ -8,6 +8,7 @@ import RegisterScreen from "../screens/RegisterScreen";
 import HomeScreen from "../screens/HomeScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import HistoryScreen from "../screens/HistoryScreen";
+import { COLORS, FONTS } from "../constants/theme";
 
 const Stack = createNativeStackNavigator();
 
@@ -73,7 +74,21 @@ export default function AuthNavigator() {
 
   return (
     <NavigationContainer ref={navigationRef}>
-      <Stack.Navigator>
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: COLORS.WHITE,
+          },
+          headerTitleStyle: {
+            color: COLORS.TEXT_PRIMARY,
+            fontWeight: FONTS.BOLD,
+          },
+          headerShadowVisible: false,
+          contentStyle: {
+            backgroundColor: COLORS.BACKGROUND,
+          },
+        }}
+      >
         {user ? (
           <>
             <Stack.Screen 
@@ -83,13 +98,13 @@ export default function AuthNavigator() {
                 headerRight: () => (
                   <View style={{ flexDirection: "row", alignItems: "center", marginRight: 10 }}>
                     <TouchableOpacity onPress={() => navigation.navigate("History")} style={{ marginRight: 15 }}>
-                      <Text style={{ color: "#3b82f6", fontWeight: "600" }}>History</Text>
+                      <Text style={{ color: COLORS.PRIMARY, fontWeight: FONTS.SEMIBOLD }}>History</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => navigation.navigate("Profile")} style={{ marginRight: 15 }}>
-                      <Text style={{ color: "#3b82f6", fontWeight: "600" }}>Profile</Text>
+                      <Text style={{ color: COLORS.PRIMARY, fontWeight: FONTS.SEMIBOLD }}>Profile</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={handleLogout} style={{ marginRight: 10 }}>
-                      <Text style={{ color: "#ef4444", fontWeight: "600" }}>Logout</Text>
+                      <Text style={{ color: COLORS.ERROR, fontWeight: FONTS.SEMIBOLD }}>Logout</Text>
                     </TouchableOpacity>
                   </View>
                 )

@@ -31,7 +31,7 @@ export default function ImageUploadCard({ image, setImage, onUpload }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>📷 Upload Image</Text>
-        <Text style={styles.subtitle}>Scan items from image</Text>
+        <Text style={styles.subtitle}>Capture a bill or item list</Text>
       </View>
 
       <View style={styles.buttonContainer}>
@@ -54,7 +54,16 @@ export default function ImageUploadCard({ image, setImage, onUpload }) {
 
       {image && (
         <View style={styles.imageContainer}>
-          <Image source={{ uri: image }} style={styles.image} />
+          <View style={styles.previewWrapper}>
+            <Image source={{ uri: image }} style={styles.image} />
+            <TouchableOpacity
+              style={styles.removeImageButton}
+              onPress={() => setImage(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.removeImageText}>×</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.imageText}>Image selected</Text>
         </View>
       )}
@@ -75,9 +84,11 @@ export default function ImageUploadCard({ image, setImage, onUpload }) {
 const styles = {
   container: {
     backgroundColor: COLORS.WHITE,
-    borderRadius: SIZES.RADIUS_LG,
-    padding: SIZES.PADDING_LG,
-    marginBottom: SIZES.MARGIN_BASE,
+    borderRadius: SIZES.RADIUS_2XL,
+    padding: SIZES.PADDING_XL,
+    marginBottom: SIZES.MARGIN_LG,
+    borderWidth: 1,
+    borderColor: '#E8EEF8',
     ...SHADOWS.MEDIUM,
   },
   header: {
@@ -101,12 +112,12 @@ const styles = {
   button: {
     flex: 1,
     padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
     alignItems: 'center',
     ...SHADOWS.SMALL,
   },
   galleryButton: {
-    backgroundColor: COLORS.SECONDARY,
+    backgroundColor: COLORS.SECONDARY_DARK,
   },
   cameraButton: {
     backgroundColor: COLORS.PRIMARY,
@@ -118,13 +129,36 @@ const styles = {
   },
   imageContainer: {
     marginBottom: SIZES.MARGIN_BASE,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+  },
+  previewWrapper: {
+    position: 'relative',
   },
   image: {
-    width: '100%',
-    height: 150,
-    borderRadius: SIZES.RADIUS_BASE,
+    width: 180,
+    height: 120,
+    borderRadius: SIZES.RADIUS_LG,
     backgroundColor: COLORS.BACKGROUND,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 28,
+    height: 28,
+    borderRadius: SIZES.RADIUS_FULL,
+    backgroundColor: COLORS.ERROR,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.SMALL,
+  },
+  removeImageText: {
+    color: COLORS.WHITE,
+    fontSize: SIZES.FONT_LG,
+    fontWeight: FONTS.BOLD,
+    lineHeight: 22,
   },
   imageText: {
     fontSize: SIZES.FONT_SM,
@@ -134,12 +168,12 @@ const styles = {
   uploadButton: {
     backgroundColor: COLORS.ACCENT,
     padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
     alignItems: 'center',
     ...SHADOWS.SMALL,
   },
   uploadButtonDisabled: {
-    backgroundColor: COLORS.GRAY,
+    backgroundColor: COLORS.GRAY_300,
     opacity: 0.6,
   },
   uploadButtonText: {

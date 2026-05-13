@@ -7,7 +7,7 @@ export default function TextInputCard({ input, setInput, onProcess }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>📝 Enter Items</Text>
-        <Text style={styles.subtitle}>Add items manually</Text>
+        <Text style={styles.subtitle}>Write items in natural language</Text>
       </View>
 
       <View style={styles.inputContainer}>
@@ -36,9 +36,11 @@ export default function TextInputCard({ input, setInput, onProcess }) {
 const styles = {
   container: {
     backgroundColor: COLORS.WHITE,
-    borderRadius: SIZES.RADIUS_LG,
-    padding: SIZES.PADDING_LG,
-    marginBottom: SIZES.MARGIN_BASE,
+    borderRadius: SIZES.RADIUS_2XL,
+    padding: SIZES.PADDING_XL,
+    marginBottom: SIZES.MARGIN_LG,
+    borderWidth: 1,
+    borderColor: '#E8EEF8',
     ...SHADOWS.MEDIUM,
   },
   header: {
@@ -60,10 +62,10 @@ const styles = {
   textInput: {
     borderWidth: 1,
     borderColor: COLORS.BORDER,
-    backgroundColor: COLORS.BACKGROUND,
+    backgroundColor: COLORS.GRAY_50,
     padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_BASE,
-    height: 100,
+    borderRadius: SIZES.RADIUS_LG,
+    height: 112,
     fontSize: SIZES.FONT_BASE,
     color: COLORS.TEXT_PRIMARY,
     textAlignVertical: 'top',
@@ -71,9 +73,9 @@ const styles = {
   button: {
     backgroundColor: COLORS.PRIMARY,
     padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
     alignItems: 'center',
-    ...SHADOWS.SMALL,
+    ...SHADOWS.MEDIUM,
   },
   buttonText: {
     color: COLORS.WHITE,

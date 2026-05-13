@@ -79,6 +79,10 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
     setShowResult(true);
   };
 
+  const handleImageSelect = (selectedImage) => {
+    setImage(selectedImage);
+  };
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'morning';
@@ -123,11 +127,10 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       </View>
       
-      {/* Animated Header */}
       <View style={styles.header}>
-        {/* Decorative Elements */}
         <View style={styles.decorativeCircle1} />
         <View style={styles.decorativeCircle2} />
+        <View style={styles.decorativeBlock} />
         
         <Animated.View 
           style={[
@@ -162,9 +165,9 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
             </Text>
           </View>
         </Animated.View>
+
       </View>
 
-      {/* Floating Cards Container */}
       <View style={styles.floatingContainer}>
         <Animated.View 
           style={[
@@ -176,7 +179,7 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
           ]}
         >
           <Text style={styles.cardTitle}>✨ Let's Get Started!</Text>
-          <Text style={styles.cardSubtitle}>Add your items in seconds</Text>
+          <Text style={styles.cardSubtitle}>Type items or scan a photo, then review totals below.</Text>
         </Animated.View>
       </View>
 
@@ -193,11 +196,16 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser }
 
         <ImageUploadCard
           image={image}
-          setImage={setImage}
+          setImage={handleImageSelect}
           onUpload={handleImage}
         />
 
-        <EditableTable data={items} userId={user?.id} onUpdateUser={updateUserHandler} />
+        <EditableTable
+          data={items}
+          userId={user?.id}
+          storeName={user?.name}
+          onUpdateUser={updateUserHandler}
+        />
 
       </ScrollView>
     </View>
@@ -220,9 +228,9 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_SECONDARY,
   },
   header: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: COLORS.PRIMARY_DARK,
     paddingTop: SIZES.PADDING_XL + 20,
-    paddingBottom: SIZES.PADDING_XL,
+    paddingBottom: SIZES.PADDING_2XL,
     paddingHorizontal: SIZES.PADDING_XL,
     borderBottomLeftRadius: SIZES.RADIUS_2XL,
     borderBottomRightRadius: SIZES.RADIUS_2XL,
@@ -232,21 +240,31 @@ const styles = StyleSheet.create({
   },
   decorativeCircle1: {
     position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    top: -20,
-    right: -20,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(49, 92, 255, 0.55)',
+    top: -42,
+    right: -28,
   },
   decorativeCircle2: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    bottom: 20,
-    left: -10,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(14, 165, 164, 0.28)',
+    bottom: -36,
+    left: -24,
+  },
+  decorativeBlock: {
+    position: 'absolute',
+    width: 210,
+    height: 64,
+    borderRadius: SIZES.RADIUS_2XL,
+    backgroundColor: 'rgba(249, 115, 22, 0.2)',
+    right: 120,
+    bottom: 26,
+    transform: [{ rotate: '-8deg' }],
   },
   headerContent: {
     flexDirection: 'row',
@@ -263,14 +281,14 @@ const styles = StyleSheet.create({
     marginRight: SIZES.MARGIN_BASE,
   },
   avatar: {
-    width: 56,
-    height: 56,
+    width: 58,
+    height: 58,
     borderRadius: SIZES.RADIUS_FULL,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.36)',
   },
   avatarText: {
     fontSize: SIZES.FONT_XL,
@@ -281,12 +299,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   greeting: {
-    fontSize: SIZES.FONT_BASE,
+    fontSize: SIZES.FONT_SM,
     color: COLORS.WHITE + 'CC',
     marginBottom: SIZES.MARGIN_XS,
   },
   welcomeText: {
-    fontSize: SIZES.FONT_XL,
+    fontSize: SIZES.FONT_2XL,
     fontWeight: FONTS.BOLD,
     color: COLORS.WHITE,
   },
@@ -295,39 +313,57 @@ const styles = StyleSheet.create({
     paddingVertical: SIZES.PADDING_SM,
     borderRadius: SIZES.RADIUS_FULL,
     borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
   },
   roleText: {
     fontSize: SIZES.FONT_SM,
-    fontWeight: FONTS.SEMIBOLD,
+    fontWeight: FONTS.BOLD,
   },
   floatingContainer: {
     paddingHorizontal: SIZES.PADDING_BASE,
-    marginTop: -SIZES.MARGIN_LG,
+    marginTop: -SIZES.MARGIN_XL,
     zIndex: 2,
   },
   floatingCard: {
     backgroundColor: COLORS.WHITE,
-    borderRadius: SIZES.RADIUS_LG,
+    borderRadius: SIZES.RADIUS_2XL,
     padding: SIZES.PADDING_LG,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     ...SHADOWS.MEDIUM,
     borderWidth: 1,
-    borderColor: COLORS.PRIMARY + '20',
+    borderColor: '#E8EEF8',
+  },
+  promptIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: SIZES.RADIUS_LG,
+    backgroundColor: COLORS.PRIMARY + '12',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SIZES.MARGIN_BASE,
+  },
+  promptIconText: {
+    fontSize: SIZES.FONT_LG,
+    fontWeight: FONTS.EXTRABOLD,
+    color: COLORS.PRIMARY,
+  },
+  promptText: {
+    flex: 1,
   },
   cardTitle: {
     fontSize: SIZES.FONT_LG,
     fontWeight: FONTS.BOLD,
-    color: COLORS.PRIMARY,
+    color: COLORS.TEXT_PRIMARY,
     marginBottom: SIZES.MARGIN_XS,
   },
   cardSubtitle: {
     fontSize: SIZES.FONT_SM,
     color: COLORS.TEXT_SECONDARY,
-    textAlign: 'center',
+    lineHeight: 20,
   },
   content: {
     flex: 1,
-    marginTop: SIZES.MARGIN_BASE,
+    marginTop: SIZES.MARGIN_SM,
   },
   scrollContent: {
     padding: SIZES.PADDING_BASE,
