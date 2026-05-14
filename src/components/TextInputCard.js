@@ -36,28 +36,27 @@ export default function TextInputCard({ input, setInput, onProcess }) {
 const styles = {
   container: {
     backgroundColor: COLORS.WHITE,
-    borderRadius: SIZES.RADIUS_2XL,
-    padding: SIZES.PADDING_XL,
-    marginBottom: SIZES.MARGIN_LG,
+    borderRadius: SIZES.RADIUS_LG,
+    padding: SIZES.PADDING_BASE,
+    marginBottom: SIZES.MARGIN_BASE,
     borderWidth: 1,
     borderColor: '#E8EEF8',
-    ...SHADOWS.MEDIUM,
+    ...SHADOWS.SMALL,
   },
   header: {
-    marginBottom: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.MARGIN_SM,
   },
   title: {
-    fontSize: SIZES.FONT_LG,
+    fontSize: SIZES.FONT_BASE,
     fontWeight: FONTS.BOLD,
     color: COLORS.TEXT_PRIMARY,
-    marginBottom: SIZES.MARGIN_XS,
   },
   subtitle: {
-    fontSize: SIZES.FONT_SM,
+    fontSize: SIZES.FONT_XS,
     color: COLORS.TEXT_SECONDARY,
   },
   inputContainer: {
-    marginBottom: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.MARGIN_SM,
   },
   textInput: {
     borderWidth: 1,
@@ -65,17 +64,18 @@ const styles = {
     backgroundColor: COLORS.GRAY_50,
     padding: SIZES.PADDING_BASE,
     borderRadius: SIZES.RADIUS_LG,
-    height: 112,
+    height: 100,
     fontSize: SIZES.FONT_BASE,
     color: COLORS.TEXT_PRIMARY,
     textAlignVertical: 'top',
   },
   button: {
     backgroundColor: COLORS.PRIMARY,
-    padding: SIZES.PADDING_BASE,
+    height: 48,
     borderRadius: SIZES.RADIUS_LG,
+    justifyContent: 'center',
     alignItems: 'center',
-    ...SHADOWS.MEDIUM,
+    ...SHADOWS.SMALL,
   },
   buttonText: {
     color: COLORS.WHITE,

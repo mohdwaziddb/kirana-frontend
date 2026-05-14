@@ -24,7 +24,15 @@ export default function EditableTable({ data, userId, storeName }) {
 
   useEffect(() => {
     if (Array.isArray(data) && data.length > 0) {
-      setItems(data);
+      // Normalize items - ensure all required fields have defaults
+      const normalizedItems = data.map(item => ({
+        name: item.name || '',
+        quantity: item.quantity || '1',
+        price: item.price || item.total || 0,
+        total: item.total || (parseFloat(item.quantity || 0) * parseFloat(item.price || 0)),
+        matched: item.matched || false,
+      }));
+      setItems(normalizedItems);
     }
   }, [data]);
 
@@ -67,52 +75,64 @@ export default function EditableTable({ data, userId, storeName }) {
     return sum + (item.total || 0);
   }, 0);
 
-  // Save table history
-  const saveHistory = async (action) => {
+  // Save to history only (without sharing)
+  const saveToHistory = async () => {
     try {
-      console.log('saveHistory called with userId:', userId);
+      console.log('saveToHistory called with userId:', userId);
       console.log('Current items:', items);
-      
+
       if (!userId) {
-        console.log('No user ID provided, skipping history save');
+        Alert.alert('Error', 'Please login to save history');
         return;
       }
 
-      // Filter out empty items
-      const validItems = items.filter(item => item.name && item.name.trim() !== '');
-      
+      // Filter out empty items and normalize
+      const validItems = items
+        .filter(item => item.name && item.name.trim() !== '')
+        .map(item => ({
+          name: String(item.name || ''),
+          quantity: String(item.quantity || '1'),
+          price: String(parseFloat(item.price) || 0),
+          total: parseFloat(item.total) || 0,
+          matched: item.matched || false,
+        }));
+
       if (validItems.length === 0) {
-        console.log('No valid items to save in history');
+        Alert.alert('Error', 'Please add at least one item before saving');
         return;
       }
 
+      console.log('Valid items to save:', validItems);
       console.log('Attempting to save history with:', {
         userId: userId,
         itemCount: validItems.length,
-        action: action
+        action: 'save'
       });
 
-      await saveTableHistory(userId, JSON.stringify(validItems), action);
-      console.log(`History saved with action: ${action}`);
-      
-      // Show success alert
-      Alert.alert(
-        'Success!', 
-        `Your table has been ${action === 'save' ? 'saved' : 'shared'} to history successfully!`,
-        [{ text: 'OK' }]
-      );
+      await saveTableHistory(userId, JSON.stringify(validItems), 'save');
+      console.log('History saved successfully');
+
+      Alert.alert('Success!', 'Your item list has been saved to history!', [{ text: 'OK' }]);
     } catch (error) {
       console.error('Save history error:', error);
-      
-      // Show user-friendly message for expired token
+
       if (error.message.includes('session has expired')) {
         Alert.alert('Session Expired', 'Your session has expired. Please logout and login again to save history.');
+      } else {
+        Alert.alert('Error', 'Failed to save history. Please try again.');
       }
     }
   };
 
-  // Share table as image
-  const shareTable = async () => {
+  // Share table as image (without saving to history)
+  const shareImage = async () => {
+    // Validate - check if there are items with names
+    const validItems = items.filter(item => item.name && item.name.trim() !== '');
+    if (validItems.length === 0) {
+      Alert.alert('Validation Error', 'Please add at least one item before sharing');
+      return;
+    }
+
     try {
       // Check if running on web
       if (Platform.OS === 'web') {
@@ -188,32 +208,50 @@ export default function EditableTable({ data, userId, storeName }) {
         // Mobile platform - use react-native-view-shot
         const uri = await captureRef(tableRef, {
           format: 'png',
-          quality: 1,
+          quality: 0.9,
         });
 
-        // Request permissions and share
+        console.log('Captured image URI:', uri);
+
+        // Request permissions
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert('Permission needed', 'Please grant permission to save photos');
           return;
         }
 
-        // Save to media library
+        // Save to media library for persistence
         const asset = await MediaLibrary.createAssetAsync(uri);
-        
-        // Share the image
-        const options = {
-          title: `${storeName || 'Store'} Item List`,
-          url: uri,
-          type: 'image/png',
-        };
-        
-        await Share.share(options);
-        Alert.alert('Success', 'Image saved and shared successfully');
-      }
 
-      // Save to history after successful share
-      await saveHistory('share');
+        // Build the message
+        const today = new Date().toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        }).replace(/\//g, '-');
+
+        const shareMessage = `${today} Items List\nFrom: ${storeName || 'User'}\nTotal: ₹${grandTotal}`;
+
+        // For Android, need to ensure proper URI format
+        const shareUri = uri.startsWith('file://') ? uri : `file://${uri}`;
+
+        // Try sharing with both image and message
+        try {
+          // First attempt: image + message
+          await Share.share({
+            title: 'Item List',
+            message: shareMessage,
+            url: shareUri,
+          });
+        } catch (e) {
+          console.log('Share with message failed, trying image only:', e);
+          // Fallback: just the image
+          await Share.share({
+            title: `${storeName || 'Store'} Item List`,
+            url: shareUri,
+          });
+        }
+      }
     } catch (error) {
       console.error('Share error:', error);
       Alert.alert('Error', 'Failed to share table image');
@@ -231,7 +269,7 @@ export default function EditableTable({ data, userId, storeName }) {
 
       {/* TABLE HEADER */}
       <View style={styles.tableHeader}>
-        <Text style={[styles.tableHeaderText, { flex: 2 }]}>Item</Text>
+        <Text style={[styles.tableHeaderText, styles.tableHeaderLeft, { flex: 2 }]}>Item</Text>
         <Text style={[styles.tableHeaderText, { flex: 1 }]}>Qty</Text>
         <Text style={[styles.tableHeaderText, { flex: 1 }]}>Price</Text>
         <Text style={[styles.tableHeaderText, { flex: 1 }]}>Total</Text>
@@ -244,7 +282,7 @@ export default function EditableTable({ data, userId, storeName }) {
           <View key={index} style={styles.tableRow}>
             {/* NAME */}
             <TextInput
-              style={[styles.tableInput, { flex: 2 }]}
+              style={[styles.tableInput, styles.tableInputLeft, { flex: 2 }]}
               value={item.name}
               placeholder="Item name"
               placeholderTextColor={COLORS.TEXT_SECONDARY}
@@ -253,9 +291,9 @@ export default function EditableTable({ data, userId, storeName }) {
 
             {/* QTY */}
             <TextInput
-              style={[styles.tableInput, { flex: 1 }]}
+              style={[styles.tableInput, styles.tableInputCenter, { flex: 1 }]}
               value={item.quantity}
-              placeholder="1"
+              placeholder="0"
               placeholderTextColor={COLORS.TEXT_SECONDARY}
               keyboardType="numeric"
               onChangeText={(val) => updateItem(index, "quantity", val)}
@@ -263,7 +301,7 @@ export default function EditableTable({ data, userId, storeName }) {
 
             {/* PRICE */}
             <TextInput
-              style={[styles.tableInput, { flex: 1 }]}
+              style={[styles.tableInput, styles.tableInputCenter, { flex: 1 }]}
               value={String(item.price)}
               placeholder="0"
               placeholderTextColor={COLORS.TEXT_SECONDARY}
@@ -282,7 +320,9 @@ export default function EditableTable({ data, userId, storeName }) {
               onPress={() => deleteRow(index)}
               activeOpacity={0.7}
             >
-              <Text style={styles.deleteButtonText}>🗑️</Text>
+              <View style={styles.deleteIconContainer}>
+                <Text style={styles.deleteButtonText}>✕</Text>
+              </View>
             </TouchableOpacity>
           </View>
         ))}
@@ -303,14 +343,24 @@ export default function EditableTable({ data, userId, storeName }) {
         <Text style={styles.totalAmount}>₹{grandTotal}</Text>
       </View>
 
-      {/* BUTTON */}
-      <TouchableOpacity
-        onPress={shareTable}
-        style={[styles.actionButton, styles.shareButton]}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.buttonText}>📸 Share and Save</Text>
-      </TouchableOpacity>
+      {/* BUTTONS */}
+      <View style={styles.buttonRow}>
+        <TouchableOpacity
+          onPress={saveToHistory}
+          style={[styles.actionButton, styles.saveButton]}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.buttonText}>💾 Save</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={shareImage}
+          style={[styles.actionButton, styles.shareButton]}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.buttonText}>📸 Share</Text>
+        </TouchableOpacity>
+      </View>
 
     </View>
   );
@@ -320,8 +370,8 @@ const styles = {
   container: {
     backgroundColor: COLORS.WHITE,
     borderRadius: SIZES.RADIUS_2XL,
-    padding: SIZES.PADDING_XL,
-    marginTop: SIZES.MARGIN_BASE,
+    padding: SIZES.PADDING_BASE,
+    marginTop: SIZES.MARGIN_SM,
     borderWidth: 1,
     borderColor: '#E8EEF8',
     ...SHADOWS.MEDIUM,
@@ -330,7 +380,7 @@ const styles = {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.MARGIN_SM,
   },
   headerText: {
     fontSize: SIZES.FONT_LG,
@@ -341,25 +391,30 @@ const styles = {
     fontSize: SIZES.FONT_SM,
     color: COLORS.TEXT_SECONDARY,
   },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.PRIMARY + '12',
-    padding: SIZES.PADDING_BASE,
-    borderRadius: SIZES.RADIUS_LG,
-    marginBottom: SIZES.MARGIN_SM,
-  },
   tableHeaderText: {
     fontSize: SIZES.FONT_SM,
     fontWeight: FONTS.SEMIBOLD,
     color: COLORS.PRIMARY,
     textAlign: 'center',
   },
+  tableHeaderLeft: {
+    textAlign: 'left',
+    paddingLeft: SIZES.PADDING_SM,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.PRIMARY + '12',
+    paddingHorizontal: SIZES.PADDING_SM,
+    paddingVertical: SIZES.PADDING_XS,
+    borderRadius: SIZES.RADIUS_LG,
+    marginBottom: SIZES.PADDING_XS,
+  },
   tableBody: {
-    marginBottom: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.MARGIN_SM,
   },
   tableRow: {
     flexDirection: 'row',
-    padding: SIZES.PADDING_SM,
+    paddingVertical: SIZES.PADDING_XS,
     borderBottomWidth: 1,
     borderColor: COLORS.BORDER,
     alignItems: 'center',
@@ -369,32 +424,53 @@ const styles = {
     borderWidth: 1,
     borderColor: COLORS.BORDER,
     backgroundColor: COLORS.GRAY_50,
-    padding: SIZES.PADDING_SM,
+    paddingVertical: SIZES.PADDING_XS,
+    paddingHorizontal: 2,
     borderRadius: SIZES.RADIUS_BASE,
     fontSize: SIZES.FONT_SM,
     color: COLORS.TEXT_PRIMARY,
     textAlign: 'center',
-    marginHorizontal: SIZES.MARGIN_XS,
+    marginHorizontal: 2,
+  },
+  tableInputCenter: {
+    textAlign: 'center',
+  },
+  tableInputLeft: {
+    textAlign: 'left',
+    paddingLeft: SIZES.PADDING_SM,
   },
   totalText: {
     fontSize: SIZES.FONT_SM,
-    fontWeight: FONTS.SEMIBOLD,
+    fontWeight: FONTS.BOLD,
     color: COLORS.TEXT_PRIMARY,
     textAlign: 'center',
+    minWidth: 50,
   },
   deleteButton: {
     alignItems: 'center',
-    padding: SIZES.PADDING_SM,
+    justifyContent: 'center',
+    padding: 2,
+  },
+  deleteIconContainer: {
+    backgroundColor: COLORS.ERROR,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   deleteButtonText: {
-    fontSize: SIZES.FONT_BASE,
+    color: COLORS.WHITE,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   addButton: {
-    backgroundColor: COLORS.PRIMARY_DARK,
-    padding: SIZES.PADDING_BASE,
+    backgroundColor: COLORS.PRIMARY,
+    height: 48,
     borderRadius: SIZES.RADIUS_LG,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.MARGIN_SM,
     ...SHADOWS.SMALL,
   },
   addButtonText: {
@@ -406,10 +482,11 @@ const styles = {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY_DARK,
-    padding: SIZES.PADDING_LG,
+    backgroundColor: COLORS.PRIMARY,
+    height: 48,
+    paddingHorizontal: SIZES.PADDING_BASE,
     borderRadius: SIZES.RADIUS_LG,
-    marginBottom: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.MARGIN_SM,
     ...SHADOWS.SMALL,
   },
   totalLabel: {
@@ -422,14 +499,23 @@ const styles = {
     fontWeight: FONTS.BOLD,
     color: COLORS.WHITE,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: SIZES.MARGIN_BASE,
+  },
   actionButton: {
-    padding: SIZES.PADDING_BASE,
+    flex: 1,
+    height: 48,
     borderRadius: SIZES.RADIUS_LG,
+    justifyContent: 'center',
     alignItems: 'center',
     ...SHADOWS.SMALL,
   },
+  saveButton: {
+    backgroundColor: COLORS.PRIMARY,
+  },
   shareButton: {
-    backgroundColor: COLORS.SECONDARY,
+    backgroundColor: COLORS.PRIMARY,
   },
   buttonText: {
     color: COLORS.WHITE,

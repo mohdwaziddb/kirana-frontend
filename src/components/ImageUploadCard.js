@@ -1,29 +1,54 @@
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import { View, Text, TouchableOpacity, Image, Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 
 export default function ImageUploadCard({ image, setImage, onUpload }) {
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'Images',
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.9,
+      });
 
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
+      if (result.canceled === false && result.assets && result.assets[0]) {
+        setImage(result.assets[0].uri);
+        // Auto trigger scan after selecting image
+        setTimeout(() => {
+          if (onUpload) {
+            onUpload();
+          }
+        }, 500);
+      }
+    } catch (error) {
+      console.log('Gallery picker error:', error);
+      Alert.alert('Error', 'Unable to open gallery. Please try again.');
     }
   };
 
   const takePhoto = async () => {
-    let result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-      allowsEditing: true,
-    });
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: 'Images',
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.9,
+      });
 
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
+      if (result.canceled === false && result.assets && result.assets[0]) {
+        setImage(result.assets[0].uri);
+        // Auto trigger scan after capturing image
+        setTimeout(() => {
+          if (onUpload) {
+            onUpload();
+          }
+        }, 500);
+      }
+    } catch (error) {
+      console.log('Camera picker error:', error);
+      Alert.alert('Error', 'Unable to open camera. Please try again.');
     }
   };
 

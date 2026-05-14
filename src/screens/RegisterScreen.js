@@ -122,9 +122,8 @@ export default function RegisterScreen({ navigation, onLogin }) {
             } else {
               console.error("onLogin is undefined!");
             }
-            
-            // Navigate to Home
-            navigation.replace("Home");
+
+            // AuthNavigator will handle navigation to Home based on user state
           } else {
             console.log("Auto-login failed:", loginData);
             setErrorPopup({ visible: true, message: "Registration successful but auto-login failed. Please login manually." });

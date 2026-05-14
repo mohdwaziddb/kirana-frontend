@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Modal, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Modal, StyleSheet, ScrollView, Alert, StatusBar } from 'react-native';
 import { getUserHistory, getHistoryById } from '../services/historyApi';
 import { COLORS, SIZES, FONTS, SHADOWS } from '../constants/theme';
 
@@ -373,6 +373,7 @@ export default function HistoryScreen({ user }) {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
       <View style={styles.header}>
         <Text style={styles.title}>📊 My History</Text>
         <Text style={styles.subtitle}>Your saved and shared records</Text>
@@ -507,6 +508,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: SIZES.PADDING_BASE,
+    paddingBottom: 100,
   },
   historyItem: {
     backgroundColor: COLORS.WHITE,
@@ -568,15 +570,16 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 380,
     backgroundColor: COLORS.WHITE,
-    borderRadius: SIZES.RADIUS_LG,
-    padding: SIZES.PADDING_BASE,
+    borderRadius: SIZES.RADIUS_2XL,
+    padding: SIZES.PADDING_LG,
     ...SHADOWS.LARGE,
   },
   calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SIZES.MARGIN_BASE,
+    marginBottom: SIZES.PADDING_BASE,
+    paddingHorizontal: SIZES.PADDING_XS,
   },
   calendarTitle: {
     fontSize: SIZES.FONT_LG,
@@ -584,50 +587,53 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_PRIMARY,
   },
   monthButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: SIZES.RADIUS_BASE,
-    backgroundColor: COLORS.GRAY_100,
+    borderRadius: SIZES.RADIUS_FULL,
+    backgroundColor: COLORS.PRIMARY + '15',
   },
   monthButtonText: {
     fontSize: SIZES.FONT_LG,
     fontWeight: FONTS.BOLD,
-    color: COLORS.TEXT_PRIMARY,
+    color: COLORS.PRIMARY,
   },
   weekRow: {
     flexDirection: 'row',
-    marginBottom: SIZES.MARGIN_XS,
+    marginBottom: SIZES.MARGIN_SM,
+    paddingHorizontal: SIZES.PADDING_XS,
   },
   weekDayText: {
     width: `${100 / 7}%`,
     textAlign: 'center',
-    fontSize: SIZES.FONT_XS,
-    fontWeight: FONTS.SEMIBOLD,
+    fontSize: SIZES.FONT_SM,
+    fontWeight: FONTS.BOLD,
     color: COLORS.TEXT_SECONDARY,
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    paddingHorizontal: SIZES.PADDING_XS,
   },
   dayButton: {
     width: `${100 / 7}%`,
     aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_FULL,
   },
   todayButton: {
-    borderWidth: 1,
-    borderColor: COLORS.PRIMARY_LIGHT,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
   },
   selectedDayButton: {
     backgroundColor: COLORS.PRIMARY,
   },
   dayButtonText: {
-    fontSize: SIZES.FONT_SM,
+    fontSize: SIZES.FONT_BASE,
     color: COLORS.TEXT_PRIMARY,
+    fontWeight: FONTS.MEDIUM,
   },
   todayButtonText: {
     fontWeight: FONTS.BOLD,
@@ -644,27 +650,30 @@ const styles = StyleSheet.create({
     marginTop: SIZES.MARGIN_BASE,
   },
   calendarCancelButton: {
-    minHeight: 40,
+    height: 44,
     justifyContent: 'center',
-    paddingHorizontal: SIZES.PADDING_SM,
-  },
-  calendarCancelText: {
-    fontSize: SIZES.FONT_SM,
-    fontWeight: FONTS.SEMIBOLD,
-    color: COLORS.TEXT_SECONDARY,
-  },
-  calendarClearButton: {
-    minHeight: 40,
-    justifyContent: 'center',
-    marginLeft: SIZES.MARGIN_SM,
-    borderRadius: SIZES.RADIUS_BASE,
-    paddingHorizontal: SIZES.PADDING_SM,
+    paddingHorizontal: SIZES.PADDING_LG,
+    borderRadius: SIZES.RADIUS_LG,
     backgroundColor: COLORS.GRAY_100,
   },
-  calendarClearText: {
-    fontSize: SIZES.FONT_SM,
+  calendarCancelText: {
+    fontSize: SIZES.FONT_BASE,
     fontWeight: FONTS.SEMIBOLD,
     color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+  },
+  calendarClearButton: {
+    height: 44,
+    justifyContent: 'center',
+    marginLeft: SIZES.MARGIN_BASE,
+    paddingHorizontal: SIZES.PADDING_LG,
+    borderRadius: SIZES.RADIUS_LG,
+    backgroundColor: COLORS.ERROR + '15',
+  },
+  calendarClearText: {
+    fontSize: SIZES.FONT_BASE,
+    fontWeight: FONTS.SEMIBOLD,
+    color: COLORS.ERROR,
   },
   modalContent: {
     flex: 1,

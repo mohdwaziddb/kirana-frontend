@@ -399,6 +399,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: SIZES.PADDING_BASE,
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: COLORS.WHITE,
@@ -500,10 +501,10 @@ const styles = StyleSheet.create({
     gap: SIZES.MARGIN_BASE,
   },
   saveButton: {
-    backgroundColor: COLORS.SUCCESS,
+    backgroundColor: COLORS.PRIMARY,
     flex: 1,
   },
   passwordButton: {
-    backgroundColor: COLORS.SECONDARY,
+    backgroundColor: COLORS.PRIMARY,
   },
 });

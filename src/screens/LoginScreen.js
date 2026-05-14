@@ -36,13 +36,8 @@ export default function LoginScreen({ navigation, onLogin }) {
         await AsyncStorage.setItem("user", JSON.stringify(data.user));
 
         // Call onLogin to update user state in AuthNavigator
+        // AuthNavigator will handle navigation to Home based on user state
         onLogin(data.user);
-
-        // Navigate to Home
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Home' }],
-        });
       } else {
         setErrorPopup({ visible: true, message: data.message || "Login failed" });
       }
