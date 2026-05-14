@@ -12,22 +12,37 @@ export const uploadImageAPI = async (image, setExtractedText) => {
 
   console.log("📸 IMAGE:", image);
 
-  let fileToUpload = image;
+  let blob = null;
 
-  // 🔥 Agar blob URL aa raha hai to convert karo
-  if (typeof image === "string" && image.startsWith("blob:")) {
-    console.log("🔄 Converting blob URL to File...");
-
+  // 🔥 Handle file:// URI (from Expo ImagePicker)
+  if (typeof image === "string" && image.startsWith("file://")) {
+    console.log("🔄 Converting file URI to Blob...");
+    try {
+      const response = await fetch(image);
+      blob = await response.blob();
+    } catch (err) {
+      console.log("❌ Error converting file URI:", err);
+      throw new Error("Failed to read image file");
+    }
+  }
+  // 🔥 Handle blob URL
+  else if (typeof image === "string" && image.startsWith("blob:")) {
+    console.log("🔄 Converting blob URL to Blob...");
     const response = await fetch(image);
-    const blob = await response.blob();
-
-    fileToUpload = new File([blob], "photo.jpg", {
-      type: blob.type || "image/jpeg",
-    });
+    blob = await response.blob();
+  }
+  // Handle File/Blob objects
+  else if (image instanceof File || image instanceof Blob) {
+    blob = image;
+  }
+  // Unknown format
+  else {
+    console.log("❌ Unsupported image format:", typeof image);
+    throw new Error("Invalid image format");
   }
 
   const formData = new FormData();
-  formData.append("file", fileToUpload); // ✅ final correct
+  formData.append("file", blob, "photo.jpg");
 
   try {
     // Get JWT token from AsyncStorage

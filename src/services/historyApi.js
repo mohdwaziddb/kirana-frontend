@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { BASE_URL } from './baseUrl';
 
 const API_BASE_URL = BASE_URL;
@@ -59,7 +60,7 @@ export const saveTableHistory = async (userId, tableData, action) => {
         await AsyncStorage.removeItem('user');
         
         // Trigger page reload to logout user
-        if (typeof window !== 'undefined') {
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
           window.location.reload();
         }
         

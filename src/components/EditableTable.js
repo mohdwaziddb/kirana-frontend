@@ -1,10 +1,9 @@
-import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, Platform } from "react-native";
 import { useState, useEffect, useRef } from "react";
 import { Share } from "react-native";
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { captureRef } from 'react-native-view-shot';
-import html2canvas from 'html2canvas';
 import { saveTableHistory } from '../services/historyApi';
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 
@@ -116,8 +115,9 @@ export default function EditableTable({ data, userId, storeName }) {
   const shareTable = async () => {
     try {
       // Check if running on web
-      if (typeof window !== 'undefined' && window.navigator) {
+      if (Platform.OS === 'web') {
         // Web platform - use html2canvas
+        const { default: html2canvas } = await import('html2canvas');
         const tableElement = tableRef.current;
         if (!tableElement) {
           Alert.alert('Error', 'Table reference not found');
