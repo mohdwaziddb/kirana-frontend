@@ -1,14 +1,12 @@
 import React, { useRef, useState, useEffect } from "react";
-import { ScrollView, Text, View, StyleSheet, StatusBar, Alert, Dimensions } from "react-native";
+import { ScrollView, Text, View, StyleSheet, StatusBar, Alert, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { processTextAPI } from "../services/textApi";
 import { uploadImageAPI } from "../services/imageApi";
 import TextInputCard from "../components/TextInputCard";
 import EditableTable from "../components/EditableTable";
-import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
-
-const { width, height } = Dimensions.get('window');
+import { COLORS } from "../constants/theme";
 
 export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, navigation, openGalleryOnMount, onGalleryOpened }) {
 
@@ -47,7 +45,6 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
     return () => clearInterval(interval);
   }, []);
 
-  // Auto open gallery when navigating from scan button
   useEffect(() => {
     if (openGalleryOnMount && onGalleryOpened) {
       const timer = setTimeout(() => {
@@ -67,7 +64,6 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
     setShowResult(true);
   };
 
-  // Handle scan - select image, crop, and process
   const handleGalleryScan = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -107,19 +103,28 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.BACKGROUND} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
+
+      {/* Header */}
+      <View style={styles.headerContainer}>
+        <View style={styles.headerGradient}>
+          <View style={styles.circle1} />
+          <View style={styles.circle2} />
+          <View style={styles.circle3} />
+
+          <View style={styles.headerContent}>
+            <Text style={styles.greetingText}>{getGreeting()},</Text>
+            <Text style={styles.userNameText}>{user?.name || 'Friend'}</Text>
+            <Text style={styles.welcomeText}>Ready to manage your inventory?</Text>
+          </View>
+        </View>
+      </View>
 
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Greeting */}
-        <View style={styles.greetingContainer}>
-          <Text style={styles.greetingText}>{getGreeting()},</Text>
-          <Text style={styles.userNameText}>{user?.name || 'Friend'}! 👋</Text>
-        </View>
-
         <TextInputCard
           input={input}
           setInput={setInput}
@@ -133,8 +138,7 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
           onUpdateUser={updateUserHandler}
         />
 
-        {/* Extra padding at bottom for bottom nav */}
-        <View style={{ height: 80 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     </View>
   );
@@ -143,38 +147,83 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
+    backgroundColor: "#F5F7FA",
   },
   fallbackContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.BACKGROUND,
+    backgroundColor: "#F5F7FA",
   },
   fallbackText: {
-    fontSize: SIZES.FONT_LG,
+    fontSize: 16,
     color: COLORS.TEXT_SECONDARY,
   },
-  greetingContainer: {
-    paddingHorizontal: SIZES.PADDING_BASE,
-    paddingTop: SIZES.PADDING_LG,
-    marginBottom: SIZES.MARGIN_BASE,
+
+  // Header
+  headerContainer: {
+    overflow: 'hidden',
+  },
+  headerGradient: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingTop: StatusBar.currentHeight + 16,
+    paddingBottom: 70,
+    paddingHorizontal: 24,
+    position: 'relative',
+  },
+  circle1: {
+    position: 'absolute',
+    top: -80,
+    right: -80,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  circle2: {
+    position: 'absolute',
+    bottom: -60,
+    left: -40,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  circle3: {
+    position: 'absolute',
+    top: '30%',
+    right: -30,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  headerContent: {
+    zIndex: 1,
   },
   greetingText: {
-    fontSize: SIZES.FONT_LG,
-    color: COLORS.TEXT_SECONDARY,
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.85)',
   },
   userNameText: {
-    fontSize: SIZES.FONT_2XL,
-    fontWeight: FONTS.BOLD,
-    color: COLORS.TEXT_PRIMARY,
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.WHITE,
+    marginTop: 4,
   },
+  welcomeText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 8,
+  },
+
   content: {
     flex: 1,
+    marginTop: -85,
   },
   scrollContent: {
-    padding: SIZES.PADDING_BASE,
-    paddingTop: SIZES.PADDING_SM,
-    paddingBottom: SIZES.PADDING_2XL,
+    paddingHorizontal: 16,
+    paddingTop: 34,
+    paddingBottom: 40,
   },
 });

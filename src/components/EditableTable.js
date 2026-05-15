@@ -9,7 +9,7 @@ import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 
 export default function EditableTable({ data, userId, storeName }) {
 
-  const [items, setItems] = useState([{ name: "", quantity: "1", price: "0", total: 0, matched: false }]);
+  const [items, setItems] = useState([{ name: "", quantity: "", price: "", total: 0, matched: false }]);
   const tableRef = useRef(null);
 
   const getShareFileName = () => {
@@ -27,7 +27,7 @@ export default function EditableTable({ data, userId, storeName }) {
       // Normalize items - ensure all required fields have defaults
       const normalizedItems = data.map(item => ({
         name: item.name || '',
-        quantity: item.quantity || '1',
+        quantity: item.quantity || '',
         price: item.price || item.total || 0,
         total: item.total || (parseFloat(item.quantity || 0) * parseFloat(item.price || 0)),
         matched: item.matched || false,
@@ -54,7 +54,7 @@ export default function EditableTable({ data, userId, storeName }) {
   const addRow = () => {
     setItems([
       ...items,
-      { name: "", quantity: "1", price: "0", total: 0, matched: false }
+      { name: "", quantity: "", price: "", total: 0, matched: false }
     ]);
   };
 
@@ -64,7 +64,7 @@ export default function EditableTable({ data, userId, storeName }) {
     
     // If no items left after deletion, add a default row
     if (newItems.length === 0) {
-      setItems([{ name: "", quantity: "1", price: "0", total: 0, matched: false }]);
+      setItems([{ name: "", quantity: "", price: "", total: 0, matched: false }]);
     } else {
       setItems(newItems);
     }
@@ -91,7 +91,7 @@ export default function EditableTable({ data, userId, storeName }) {
         .filter(item => item.name && item.name.trim() !== '')
         .map(item => ({
           name: String(item.name || ''),
-          quantity: String(item.quantity || '1'),
+          quantity: String(item.quantity || ''),
           price: String(parseFloat(item.price) || 0),
           total: parseFloat(item.total) || 0,
           matched: item.matched || false,
@@ -293,7 +293,7 @@ export default function EditableTable({ data, userId, storeName }) {
             <TextInput
               style={[styles.tableInput, styles.tableInputCenter, { flex: 1 }]}
               value={item.quantity}
-              placeholder="0"
+              placeholder="Qty"
               placeholderTextColor={COLORS.TEXT_SECONDARY}
               keyboardType="numeric"
               onChangeText={(val) => updateItem(index, "quantity", val)}
@@ -465,7 +465,7 @@ const styles = {
     fontWeight: 'bold',
   },
   addButton: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#F59E0B',
     height: 48,
     borderRadius: SIZES.RADIUS_LG,
     justifyContent: 'center',
@@ -482,7 +482,7 @@ const styles = {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#8B5CF6',
     height: 48,
     paddingHorizontal: SIZES.PADDING_BASE,
     borderRadius: SIZES.RADIUS_LG,
@@ -512,10 +512,10 @@ const styles = {
     ...SHADOWS.SMALL,
   },
   saveButton: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#10B981',
   },
   shareButton: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#6366F1',
   },
   buttonText: {
     color: COLORS.WHITE,

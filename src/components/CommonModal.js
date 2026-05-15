@@ -79,9 +79,7 @@ const CommonModal = ({
             { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
           ]}
         >
-          <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
-            <Text style={styles.icon}>{icon}</Text>
-          </View>
+        
 
           {image && (
             <View style={styles.imageContainer}>

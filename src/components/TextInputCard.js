@@ -70,7 +70,7 @@ const styles = {
     textAlignVertical: 'top',
   },
   button: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#0EA5A4',
     height: 48,
     borderRadius: SIZES.RADIUS_LG,
     justifyContent: 'center',
