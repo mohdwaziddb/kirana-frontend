@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, Image, Alert } from "react-native";
+import { View, Text, TouchableOpacity, Image, Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 
@@ -6,10 +6,17 @@ export default function ImageUploadCard({ image, setImage, onUpload }) {
 
   const pickImage = async () => {
     try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission needed', 'Please allow photo access to select an image.');
+          return;
+        }
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images',
+        mediaTypes: ['images'],
         allowsEditing: true,
-        aspect: [4, 3],
         quality: 0.9,
       });
 
@@ -30,10 +37,17 @@ export default function ImageUploadCard({ image, setImage, onUpload }) {
 
   const takePhoto = async () => {
     try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission needed', 'Please allow camera access to take a photo.');
+          return;
+        }
+      }
+
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: 'Images',
+        mediaTypes: ['images'],
         allowsEditing: true,
-        aspect: [4, 3],
         quality: 0.9,
       });
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { View, TouchableOpacity, Text, StyleSheet, Alert } from "react-native";
 import { NavigationContainer, CommonActions } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
@@ -42,8 +43,10 @@ const getRandomLogoutMessage = () => {
 };
 
 // Single BottomNav component
-function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount }) {
+function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount, onLogout }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [logoutMessage, setLogoutMessage] = useState("");
+  const insets = useSafeAreaInsets();
 
   const navigateTo = (screen) => {
     if (navigation && navigation.navigate) {
@@ -53,17 +56,14 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount }) {
 
   const handleLogoutConfirm = async () => {
     setShowLogoutModal(false);
+    setOpenGalleryOnMount(false);
     try {
-      await AsyncStorage.removeItem("token");
-      await AsyncStorage.removeItem("user");
+      if (onLogout) {
+        await onLogout();
+      }
     } catch (error) {
-      console.error("Error clearing storage:", error);
-    }
-    if (navigation && navigation.reset) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
+      console.error("Error during logout:", error);
+      Alert.alert("Logout Failed", "Unable to logout. Please try again.");
     }
   };
 
@@ -72,18 +72,19 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount }) {
   };
 
   const handleLogout = () => {
+    setLogoutMessage(getRandomLogoutMessage());
     setShowLogoutModal(true);
   };
 
   return (
     <>
-    <View style={styles.bottomNav}>
+    <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, SIZES.PADDING_SM) }]}>
       <TouchableOpacity
         style={[styles.navItem, currentScreen === 'Home' && styles.navItemActive]}
         activeOpacity={0.7}
         onPress={() => navigateTo('Home')}
       >
-        <View style={[styles.navIconContainer, currentScreen === 'Home' && styles.navIconActive]}>
+        <View style={[styles.navIconContainer, currentScreen === 'Home' && styles.navIconContainerActive]}>
           <Text style={styles.navIcon}>🏠</Text>
         </View>
         <Text style={[styles.navLabel, currentScreen === 'Home' && styles.navLabelActive]}>Home</Text>
@@ -94,7 +95,7 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount }) {
         activeOpacity={0.7}
         onPress={() => navigateTo('Profile')}
       >
-        <View style={[styles.navIconContainer, currentScreen === 'Profile' && styles.navIconActive]}>
+        <View style={[styles.navIconContainer, currentScreen === 'Profile' && styles.navIconContainerActive]}>
           <Text style={styles.navIcon}>👤</Text>
         </View>
         <Text style={[styles.navLabel, currentScreen === 'Profile' && styles.navLabelActive]}>Profile</Text>
@@ -108,8 +109,8 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount }) {
           navigateTo('Home');
         }}
       >
-        <View style={[styles.navIconContainer, styles.navIconScan, currentScreen === 'Scan' && styles.navIconActive]}>
-          <Text style={styles.navIconActive}>📷</Text>
+        <View style={[styles.navIconContainer, styles.navIconScan, currentScreen === 'Scan' && styles.navIconContainerActive]}>
+          <Text style={styles.navIconTextActive}>📷</Text>
         </View>
         <Text style={[styles.navLabel, currentScreen === 'Scan' && styles.navLabelActive]}>Scan</Text>
       </TouchableOpacity>
@@ -119,7 +120,7 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount }) {
         activeOpacity={0.7}
         onPress={() => navigateTo('History')}
       >
-        <View style={[styles.navIconContainer, currentScreen === 'History' && styles.navIconActive]}>
+        <View style={[styles.navIconContainer, currentScreen === 'History' && styles.navIconContainerActive]}>
           <Text style={styles.navIcon}>📋</Text>
         </View>
         <Text style={[styles.navLabel, currentScreen === 'History' && styles.navLabelActive]}>History</Text>
@@ -141,7 +142,7 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount }) {
       visible={showLogoutModal}
       type="confirm"
       title="Wait! ⏸️"
-      message={`${getRandomLogoutMessage()}\n\nAre you sure you want to logout?`}
+      message={`${logoutMessage || getRandomLogoutMessage()}\n\nAre you sure you want to logout?`}
       confirmText="Haan, jaa raha hoon 👋"
       cancelText="Nahi, raho"
       onConfirm={handleLogoutConfirm}
@@ -199,11 +200,12 @@ export default function AuthNavigator() {
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem("token");
-      await AsyncStorage.removeItem("user");
+      await AsyncStorage.multiRemove(["token", "user", "tokenExpiry"]);
     } catch (error) {
       console.error("Error clearing storage:", error);
     }
+    setCurrentScreen('Home');
+    setOpenGalleryOnMount(false);
     setUser(null);
   };
 
@@ -277,7 +279,12 @@ export default function AuthNavigator() {
           </Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>
-      <BottomNav currentScreen={currentScreen} navigation={navRef} setOpenGalleryOnMount={setOpenGalleryOnMount} />
+      <BottomNav
+        currentScreen={currentScreen}
+        navigation={navRef}
+        setOpenGalleryOnMount={setOpenGalleryOnMount}
+        onLogout={handleLogout}
+      />
     </View>
   );
 }
@@ -290,12 +297,13 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     backgroundColor: COLORS.WHITE,
-    paddingVertical: SIZES.PADDING_SM,
+    paddingTop: SIZES.PADDING_SM,
     paddingHorizontal: SIZES.PADDING_XS,
     borderTopWidth: 1,
     borderTopColor: COLORS.BORDER,
     justifyContent: 'space-around',
     alignItems: 'center',
+    minHeight: 78,
     ...SHADOWS.MEDIUM,
   },
   navItem: {
@@ -303,6 +311,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
     paddingVertical: 4,
+    minHeight: 56,
   },
   navItemActive: {},
   navIconContainer: {
@@ -314,7 +323,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 2,
   },
-  navIconActive: {
+  navIconContainerActive: {
     backgroundColor: COLORS.PRIMARY,
   },
   navIconScan: {
@@ -326,13 +335,14 @@ const styles = StyleSheet.create({
   navIcon: {
     fontSize: 18,
   },
-  navIconActive: {
+  navIconTextActive: {
     fontSize: 22,
   },
   navLabel: {
-    fontSize: SIZES.FONT_XS - 2,
+    fontSize: 11,
     color: COLORS.TEXT_SECONDARY,
     fontWeight: FONTS.MEDIUM,
+    lineHeight: 14,
   },
   navLabelActive: {
     color: COLORS.PRIMARY,

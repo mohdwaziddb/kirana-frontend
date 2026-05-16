@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ErrorPopup from "../components/ErrorPopup";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
@@ -12,419 +12,465 @@ export default function RegisterScreen({ navigation, onLogin }) {
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isBuyer, setIsBuyer] = useState(true); // Default to Buyer
-  const [isSeller, setIsSeller] = useState(false); // Seller disabled
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errorPopup, setErrorPopup] = useState({ visible: false, message: "" });
+  const [errorPopup, setErrorPopup] = useState({ visible: false, title: "", message: "" });
 
-  // Email validation function
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  const validateEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const validateMobile = (value) => /^[0-9]{10}$/.test(value);
 
-  // Mobile validation function
-  const validateMobile = (mobile) => {
-    const mobileRegex = /^[0-9]{10}$/;
-    return mobileRegex.test(mobile);
+  const showError = (message, title = "Registration failed") => {
+    setErrorPopup({ visible: true, title, message });
   };
 
   const handleRegister = async () => {
-    setErrorPopup({ visible: false, message: "" });
+    setErrorPopup({ visible: false, title: "", message: "" });
 
-    // Validation
-    if (!name.trim()) {
-      setErrorPopup({ visible: true, message: "Name is required" });
+    const trimmedName = name.trim();
+    const trimmedUsername = username.trim();
+    const trimmedEmail = email.trim();
+    const trimmedMobile = mobile.trim();
+
+    if (!trimmedName) {
+      showError("Please enter your full name.", "Name required");
       return;
     }
 
-    if (!username.trim()) {
-      setErrorPopup({ visible: true, message: "Username is required" });
+    if (!trimmedUsername) {
+      showError("Please choose a username.", "Username required");
       return;
     }
 
-    if (username.length < 3) {
-      setErrorPopup({ visible: true, message: "Username must be at least 3 characters" });
+    if (trimmedUsername.length < 3) {
+      showError("Username must be at least 3 characters long.", "Username too short");
       return;
     }
 
-    if (!validateEmail(email)) {
-      setErrorPopup({ visible: true, message: "Please enter a valid email address" });
+    if (!validateEmail(trimmedEmail)) {
+      showError("Please enter a valid email address.", "Invalid email");
       return;
     }
 
-    if (!validateMobile(mobile)) {
-      setErrorPopup({ visible: true, message: "Mobile number must be 10 digits" });
+    if (!validateMobile(trimmedMobile)) {
+      showError("Mobile number must be exactly 10 digits.", "Invalid mobile number");
       return;
     }
 
     if (password.length < 6) {
-      setErrorPopup({ visible: true, message: "Password must be at least 6 characters" });
+      showError("Password must be at least 6 characters long.", "Password too short");
       return;
     }
 
     if (password !== confirmPassword) {
-      setErrorPopup({ visible: true, message: "Passwords do not match" });
+      showError("Password and confirm password do not match.", "Password mismatch");
       return;
     }
-
-    if (!isBuyer && !isSeller) {
-      setErrorPopup({ visible: true, message: "Please select either Buyer or Seller role" });
-      return;
-    }
-
-    const role = isBuyer ? "BUYER" : "SELLER";
 
     setLoading(true);
-
     try {
       const response = await fetch(`${BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name, username, email, mobile, password, role }),
+        body: JSON.stringify({
+          name: trimmedName,
+          username: trimmedUsername,
+          email: trimmedEmail,
+          mobile: trimmedMobile,
+          password,
+          role: "SELLER",
+        }),
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        console.log("Registration successful:", data);
-        
-        // Auto-login after successful registration
-        try {
-          const loginResponse = await fetch(`${BASE_URL}/api/auth/login`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ identifier: email, password }),
-          });
+      if (!response.ok) {
+        showError(data.message || "Could not create your account. Please try again.");
+        return;
+      }
 
-          const loginData = await loginResponse.json();
+      const loginResponse = await fetch(`${BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ identifier: trimmedEmail, password }),
+      });
 
-          if (loginResponse.ok) {
-            // Store token and user info
-            await AsyncStorage.setItem("token", loginData.token);
-            await AsyncStorage.setItem("user", JSON.stringify(loginData.user));
-            
-            // Set token expiry (5 minutes from now)
-            const expiryTime = new Date().getTime() + 5 * 60 * 1000;
-            await AsyncStorage.setItem("tokenExpiry", expiryTime.toString());
-            
-            console.log("Auto-login successful, calling onLogin and navigating to Home");
-            console.log("loginData.user:", loginData.user);
-            console.log("onLogin function:", onLogin);
-            
-            // Call onLogin to update user state in AuthNavigator
-            if (onLogin) {
-              onLogin(loginData.user);
-            } else {
-              console.error("onLogin is undefined!");
-            }
+      const loginData = await loginResponse.json();
 
-            // AuthNavigator will handle navigation to Home based on user state
-          } else {
-            console.log("Auto-login failed:", loginData);
-            setErrorPopup({ visible: true, message: "Registration successful but auto-login failed. Please login manually." });
-          }
-        } catch (error) {
-          console.error("Auto-login error:", error);
-          setErrorPopup({ visible: true, message: "Registration successful but auto-login failed. Please login manually." });
-        }
+      if (loginResponse.ok) {
+        await AsyncStorage.setItem("token", loginData.token);
+        await AsyncStorage.setItem("user", JSON.stringify(loginData.user));
+        const expiryTime = new Date().getTime() + 5 * 60 * 1000;
+        await AsyncStorage.setItem("tokenExpiry", expiryTime.toString());
+        onLogin?.(loginData.user);
       } else {
-        console.log("Registration failed:", data);
-        setErrorPopup({ visible: true, message: data.message || "Registration failed" });
+        showError("Your account was created, but auto-login failed. Please login manually.", "Account created");
       }
     } catch (error) {
-      console.error("Registration error:", error);
-      setErrorPopup({ visible: true, message: "Network error. Please try again." });
+      showError("Could not connect to the server. Please check your internet connection and try again.", "Network error");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
-      </View>
-      
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
+
+      <View style={styles.headerContainer}>
+        <View style={styles.headerGradient}>
+          <View style={styles.circleTop} />
+          <View style={styles.circleBottom} />
           <View style={styles.logo}>
-            <Text style={styles.logoText}>🏪</Text>
+            <Text style={styles.logoText}>KS</Text>
           </View>
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Start building item lists faster</Text>
         </View>
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Join Kirana Store today</Text>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.formContainer}
-        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your full name"
-            placeholderTextColor={COLORS.GRAY_400}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-          />
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Account Details</Text>
+          <Text style={styles.sectionSubtitle}>Seller accounts are available now</Text>
         </View>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Username</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Choose a username"
-            placeholderTextColor={COLORS.GRAY_400}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-          />
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Email Address</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor={COLORS.GRAY_400}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Mobile Number</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="10-digit mobile number"
-            placeholderTextColor={COLORS.GRAY_400}
-            value={mobile}
-            onChangeText={setMobile}
-            keyboardType="numeric"
-            maxLength={10}
-          />
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Create a password"
-            placeholderTextColor={COLORS.GRAY_400}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Confirm Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm your password"
-            placeholderTextColor={COLORS.GRAY_400}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-          />
-        </View>
-        
+        <AuthInput
+          label="Full Name"
+          value={name}
+          onChangeText={setName}
+          placeholder="Enter your full name"
+          focused={focusedField === "name"}
+          onFocus={() => setFocusedField("name")}
+          onBlur={() => setFocusedField("")}
+          autoCapitalize="words"
+        />
+
+        <AuthInput
+          label="Username"
+          value={username}
+          onChangeText={setUsername}
+          placeholder="Choose a username"
+          focused={focusedField === "username"}
+          onFocus={() => setFocusedField("username")}
+          onBlur={() => setFocusedField("")}
+          autoCapitalize="none"
+        />
+
+        <AuthInput
+          label="Email Address"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="Enter your email"
+          focused={focusedField === "email"}
+          onFocus={() => setFocusedField("email")}
+          onBlur={() => setFocusedField("")}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+
+        <AuthInput
+          label="Mobile Number"
+          value={mobile}
+          onChangeText={setMobile}
+          placeholder="10-digit mobile number"
+          focused={focusedField === "mobile"}
+          onFocus={() => setFocusedField("mobile")}
+          onBlur={() => setFocusedField("")}
+          keyboardType="numeric"
+          maxLength={10}
+        />
+
+        <PasswordInput
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Create a password"
+          focused={focusedField === "password"}
+          onFocus={() => setFocusedField("password")}
+          onBlur={() => setFocusedField("")}
+          visible={showPassword}
+          onToggle={() => setShowPassword((value) => !value)}
+        />
+
+        <PasswordInput
+          label="Confirm Password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Confirm your password"
+          focused={focusedField === "confirmPassword"}
+          onFocus={() => setFocusedField("confirmPassword")}
+          onBlur={() => setFocusedField("")}
+          visible={showConfirmPassword}
+          onToggle={() => setShowConfirmPassword((value) => !value)}
+        />
+
         <View style={styles.roleContainer}>
-          <Text style={styles.roleLabel}>Select Role:</Text>
-          
-          <TouchableOpacity 
-            style={[styles.roleOption, isBuyer && styles.roleOptionSelected]}
-            onPress={() => {
-              setIsBuyer(!isBuyer);
-              if (!isBuyer) setIsSeller(false);
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.radioButton, isBuyer && styles.radioButtonSelected]}>
-              {isBuyer && <View style={styles.radioDot} />}
-            </View>
+          <Text style={styles.inputLabel}>Account Type</Text>
+          <View style={[styles.roleOption, styles.roleOptionDisabled]}>
+            <View style={styles.radioButtonDisabled} />
             <View style={styles.roleContent}>
-              <Text style={[styles.roleText, isBuyer && styles.roleTextSelected]}>🛒 Buyer</Text>
-              <Text style={styles.roleDescription}>Shop for products</Text>
+              <Text style={styles.roleTextDisabled}>Buyer</Text>
+              <Text style={styles.roleDescription}>Currently disabled</Text>
             </View>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.roleOption, styles.roleOptionDisabled]}
-            disabled={true}
-          >
-            <View style={[styles.radioButton, styles.radioButtonDisabled]}>
+          </View>
+          <View style={[styles.roleOption, styles.roleOptionSelected]}>
+            <View style={styles.radioButtonSelected}>
               <View style={styles.radioDot} />
             </View>
             <View style={styles.roleContent}>
-              <Text style={[styles.roleText, styles.roleTextDisabled]}>🏪 Seller (Coming Soon)</Text>
-              <Text style={styles.roleDescription}>Sell your products</Text>
+              <Text style={styles.roleText}>Seller</Text>
+              <Text style={styles.roleDescription}>Create and manage item lists</Text>
             </View>
-          </TouchableOpacity>
+          </View>
         </View>
-        
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
+
+        <TouchableOpacity
+          style={[styles.primaryButton, loading && styles.buttonDisabled]}
           onPress={handleRegister}
           disabled={loading}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Text style={styles.buttonText}>
-            {loading ? "Creating Account..." : "Create Account"}
+          <Text style={styles.primaryButtonText}>
+            {loading ? "Creating account..." : "Create Account"}
           </Text>
         </TouchableOpacity>
-        
-        <View style={styles.footer}>
+
+        <View style={styles.footerRow}>
           <Text style={styles.footerText}>Already have an account?</Text>
-          <TouchableOpacity 
-            style={styles.linkButton}
-            onPress={() => navigation.navigate("Login")}
-            activeOpacity={0.6}
-          >
-            <Text style={styles.linkText}>Login</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("Login")} activeOpacity={0.7}>
+            <Text style={styles.footerLink}>Login</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
-      
+
       <ErrorPopup
         visible={errorPopup.visible}
+        title={errorPopup.title}
         message={errorPopup.message}
-        onClose={() => setErrorPopup({ visible: false, message: "" })}
+        onClose={() => setErrorPopup({ visible: false, title: "", message: "" })}
       />
     </KeyboardAvoidingView>
+  );
+}
+
+function AuthInput({ label, focused, ...props }) {
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <View style={[styles.inputShell, focused && styles.inputShellFocused]}>
+        <TextInput
+          style={styles.input}
+          placeholderTextColor={COLORS.GRAY_400}
+          returnKeyType="next"
+          {...props}
+        />
+      </View>
+    </View>
+  );
+}
+
+function PasswordInput({ label, focused, visible, onToggle, ...props }) {
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <View style={[styles.inputShell, focused && styles.inputShellFocused]}>
+        <TextInput
+          style={styles.input}
+          placeholderTextColor={COLORS.GRAY_400}
+          secureTextEntry={!visible}
+          returnKeyType="next"
+          {...props}
+        />
+        <TouchableOpacity style={styles.visibilityButton} onPress={onToggle} activeOpacity={0.75}>
+          <Text style={styles.visibilityText}>{visible ? "Hide" : "Show"}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
+    backgroundColor: "#F5F7FA",
   },
-  header: {
-    paddingTop: SIZES.PADDING_2XL,
-    paddingBottom: SIZES.PADDING_XL,
+  headerContainer: {
+    overflow: "hidden",
+  },
+  headerGradient: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingTop: (StatusBar.currentHeight || 0) + 26,
+    paddingBottom: 86,
     paddingHorizontal: SIZES.PADDING_XL,
-    alignItems: 'center',
+    alignItems: "center",
+    position: "relative",
   },
-  logoContainer: {
-    marginBottom: SIZES.MARGIN_LG,
+  circleTop: {
+    position: "absolute",
+    top: -90,
+    right: -80,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  circleBottom: {
+    position: "absolute",
+    bottom: -70,
+    left: -50,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   logo: {
-    width: 80,
-    height: 80,
-    borderRadius: SIZES.RADIUS_XL,
-    backgroundColor: COLORS.PRIMARY,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: COLORS.WHITE,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: SIZES.MARGIN_BASE,
     ...SHADOWS.MEDIUM,
   },
   logoText: {
-    fontSize: SIZES.FONT_4XL,
+    fontSize: SIZES.FONT_2XL,
+    fontWeight: FONTS.EXTRABOLD,
+    color: COLORS.PRIMARY,
   },
   title: {
     fontSize: SIZES.FONT_3XL,
     fontWeight: FONTS.BOLD,
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: SIZES.MARGIN_SM,
-    textAlign: 'center',
+    color: COLORS.WHITE,
+    textAlign: "center",
   },
   subtitle: {
     fontSize: SIZES.FONT_BASE,
-    color: COLORS.TEXT_SECONDARY,
-    textAlign: 'center',
-    lineHeight: 20,
+    color: "rgba(255,255,255,0.82)",
+    textAlign: "center",
+    marginTop: SIZES.MARGIN_SM,
   },
   formContainer: {
     flex: 1,
-    backgroundColor: COLORS.WHITE,
-    borderTopLeftRadius: SIZES.RADIUS_2XL,
-    borderTopRightRadius: SIZES.RADIUS_2XL,
+    marginTop: -48,
   },
   scrollContent: {
-    paddingHorizontal: SIZES.PADDING_XL,
-    paddingTop: SIZES.PADDING_2XL,
+    marginHorizontal: SIZES.MARGIN_BASE,
+    backgroundColor: COLORS.WHITE,
+    borderRadius: SIZES.RADIUS_2XL,
+    padding: SIZES.PADDING_XL,
     paddingBottom: SIZES.PADDING_2XL,
+    ...SHADOWS.MEDIUM,
+  },
+  sectionHeader: {
+    marginBottom: SIZES.MARGIN_XL,
+  },
+  sectionTitle: {
+    fontSize: SIZES.FONT_2XL,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  sectionSubtitle: {
+    fontSize: SIZES.FONT_SM,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: SIZES.MARGIN_XS,
   },
   inputContainer: {
     marginBottom: SIZES.MARGIN_LG,
   },
   inputLabel: {
     fontSize: SIZES.FONT_SM,
-    fontWeight: FONTS.MEDIUM,
+    fontWeight: FONTS.SEMIBOLD,
     color: COLORS.TEXT_PRIMARY,
     marginBottom: SIZES.MARGIN_SM,
   },
-  input: {
-    height: SIZES.INPUT_HEIGHT,
-    backgroundColor: COLORS.INPUT_BACKGROUND,
+  inputShell: {
+    height: SIZES.INPUT_HEIGHT + 4,
+    backgroundColor: COLORS.GRAY_50,
     borderWidth: 1,
     borderColor: COLORS.BORDER,
-    borderRadius: SIZES.RADIUS_BASE,
+    borderRadius: SIZES.RADIUS_LG,
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: SIZES.PADDING_BASE,
+  },
+  inputShellFocused: {
+    borderColor: COLORS.PRIMARY,
+    backgroundColor: COLORS.WHITE,
+  },
+  input: {
+    flex: 1,
+    height: "100%",
     fontSize: SIZES.FONT_BASE,
     color: COLORS.TEXT_PRIMARY,
+    paddingVertical: 0,
+  },
+  visibilityButton: {
+    minWidth: 50,
+    alignItems: "flex-end",
+    paddingLeft: SIZES.PADDING_SM,
+  },
+  visibilityText: {
+    fontSize: SIZES.FONT_SM,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.PRIMARY,
   },
   roleContainer: {
-    marginBottom: SIZES.MARGIN_LG,
-  },
-  roleLabel: {
-    fontSize: SIZES.FONT_SM,
-    fontWeight: FONTS.MEDIUM,
-    color: COLORS.TEXT_PRIMARY,
     marginBottom: SIZES.MARGIN_BASE,
   },
   roleOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: SIZES.PADDING_BASE,
     borderWidth: 1,
     borderColor: COLORS.BORDER,
-    borderRadius: SIZES.RADIUS_BASE,
-    marginBottom: SIZES.MARGIN_BASE,
-    backgroundColor: COLORS.INPUT_BACKGROUND,
+    borderRadius: SIZES.RADIUS_LG,
+    marginBottom: SIZES.MARGIN_SM,
+    backgroundColor: COLORS.GRAY_50,
   },
   roleOptionSelected: {
     borderColor: COLORS.PRIMARY,
-    backgroundColor: COLORS.PRIMARY + '10',
+    backgroundColor: '#EEF3FF',
   },
   roleOptionDisabled: {
-    opacity: 0.5,
-    backgroundColor: COLORS.GRAY_100,
-  },
-  radioButton: {
-    width: 20,
-    height: 20,
-    borderRadius: SIZES.RADIUS_FULL,
-    borderWidth: 2,
-    borderColor: COLORS.BORDER,
-    marginRight: SIZES.MARGIN_BASE,
-    justifyContent: 'center',
-    alignItems: 'center',
+    opacity: 0.6,
   },
   radioButtonSelected: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
     borderColor: COLORS.PRIMARY,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: SIZES.MARGIN_BASE,
   },
   radioButtonDisabled: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
     borderColor: COLORS.GRAY_300,
-    backgroundColor: COLORS.GRAY_300,
+    marginRight: SIZES.MARGIN_BASE,
   },
   radioDot: {
     width: 10,
     height: 10,
-    borderRadius: SIZES.RADIUS_FULL,
+    borderRadius: 5,
     backgroundColor: COLORS.PRIMARY,
   },
   roleContent: {
@@ -432,55 +478,50 @@ const styles = StyleSheet.create({
   },
   roleText: {
     fontSize: SIZES.FONT_BASE,
-    fontWeight: FONTS.MEDIUM,
+    fontWeight: FONTS.BOLD,
     color: COLORS.TEXT_PRIMARY,
-    marginBottom: 2,
-  },
-  roleTextSelected: {
-    color: COLORS.PRIMARY,
   },
   roleTextDisabled: {
+    fontSize: SIZES.FONT_BASE,
+    fontWeight: FONTS.BOLD,
     color: COLORS.GRAY_500,
   },
   roleDescription: {
     fontSize: SIZES.FONT_SM,
     color: COLORS.TEXT_SECONDARY,
+    marginTop: 2,
   },
-  button: {
-    height: SIZES.BUTTON_HEIGHT,
+  primaryButton: {
+    height: SIZES.BUTTON_HEIGHT_LG,
     backgroundColor: COLORS.PRIMARY,
-    borderRadius: SIZES.RADIUS_BASE,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: SIZES.MARGIN_LG,
-    marginBottom: SIZES.MARGIN_BASE,
+    borderRadius: SIZES.RADIUS_LG,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: SIZES.MARGIN_BASE,
     ...SHADOWS.MEDIUM,
   },
   buttonDisabled: {
     backgroundColor: COLORS.GRAY_300,
   },
-  buttonText: {
+  primaryButtonText: {
     fontSize: SIZES.FONT_BASE,
-    fontWeight: FONTS.SEMIBOLD,
-    color: COLORS.TEXT_WHITE,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.WHITE,
   },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: SIZES.MARGIN_BASE,
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: SIZES.MARGIN_XL,
+    gap: SIZES.MARGIN_XS,
   },
   footerText: {
     fontSize: SIZES.FONT_SM,
     color: COLORS.TEXT_SECONDARY,
-    marginRight: SIZES.MARGIN_SM,
   },
-  linkButton: {
-    paddingVertical: SIZES.PADDING_XS,
-  },
-  linkText: {
+  footerLink: {
     fontSize: SIZES.FONT_SM,
-    fontWeight: FONTS.MEDIUM,
+    fontWeight: FONTS.BOLD,
     color: COLORS.PRIMARY,
   },
 });

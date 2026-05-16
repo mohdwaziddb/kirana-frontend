@@ -13,9 +13,20 @@ const CommonModal = ({
   onCancel,
   showCancel = false,
   image = null, // Optional image URL or local require
+  autoCloseTime = 0, // Auto close after X milliseconds (0 = disabled)
+  showOnlyConfirm = false,
 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
+
+  useEffect(() => {
+    if (autoCloseTime > 0 && visible) {
+      const timer = setTimeout(() => {
+        if (onConfirm) onConfirm();
+      }, autoCloseTime);
+      return () => clearTimeout(timer);
+    }
+  }, [visible, autoCloseTime]);
 
   useEffect(() => {
     if (visible) {
@@ -62,6 +73,8 @@ const CommonModal = ({
   };
 
   const { icon, color } = getIconAndColor();
+  const isImageUri = typeof image === 'string' && /^(https?:|file:|data:|blob:)/.test(image);
+  const confirmColor = type === 'error' ? COLORS.ERROR : type === 'success' ? COLORS.SUCCESS : COLORS.PRIMARY;
 
   if (!visible) return null;
 
@@ -83,7 +96,7 @@ const CommonModal = ({
 
           {image && (
             <View style={styles.imageContainer}>
-              {typeof image === 'string' && image.length <= 2 ? (
+              {typeof image === 'string' && !isImageUri ? (
                 <Text style={styles.emojiImage}>{image}</Text>
               ) : (
                 <Image source={typeof image === 'string' ? { uri: image } : image} style={styles.image} />
@@ -94,7 +107,7 @@ const CommonModal = ({
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
 
-          <View style={styles.buttonContainer}>
+          <View style={[styles.buttonContainer, showOnlyConfirm && { justifyContent: 'center' }]}>
             {showCancel && (
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton]}
@@ -107,8 +120,8 @@ const CommonModal = ({
             <TouchableOpacity
               style={[
                 styles.button,
-                styles.confirmButton,
-                { backgroundColor: COLORS.ERROR },
+                showOnlyConfirm ? styles.onlyConfirmButton : styles.confirmButton,
+                { backgroundColor: showOnlyConfirm ? confirmColor : COLORS.ERROR },
               ]}
               onPress={onConfirm}
               activeOpacity={0.8}
@@ -196,6 +209,9 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     flex: 2,
+  },
+  onlyConfirmButton: {
+    minWidth: 140,
   },
   cancelButtonText: {
     color: COLORS.TEXT_PRIMARY,

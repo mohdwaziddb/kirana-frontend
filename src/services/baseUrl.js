@@ -20,7 +20,7 @@ const LOCAL_DEVICE_URL = "http://192.168.1.11:9001";
 // LIVE AWS SERVER URL
 // ==========================================
 
-const LIVE_URL = "http://15.206.183.52:8081";
+const LIVE_URL = "http://13.235.61.146:8081";
 
 // ==========================================
 // CHANGE THIS FLAG
@@ -28,7 +28,7 @@ const LIVE_URL = "http://15.206.183.52:8081";
 // false = Local Backend
 // ==========================================
 
-const IS_LIVE = true;
+const IS_LIVE = false;
 
 // ==========================================
 // EXPORT BASE URL

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { StyleSheet, View, Text } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthNavigator from "./src/components/AuthNavigator";
 
@@ -10,11 +11,13 @@ export default function App() {
 
   return (
 
-    <View style={styles.container}>
+    <SafeAreaProvider>
+      <View style={styles.container}>
 
-      <AuthNavigator />
+        <AuthNavigator />
 
-    </View>
+      </View>
+    </SafeAreaProvider>
 
   );
 

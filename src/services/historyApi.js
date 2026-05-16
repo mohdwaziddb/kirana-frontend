@@ -4,75 +4,80 @@ import { BASE_URL } from './baseUrl';
 
 const API_BASE_URL = BASE_URL;
 
-export const saveTableHistory = async (userId, tableData, action) => {
+const clearSessionIfExpired = async () => {
+  await AsyncStorage.removeItem('token');
+  await AsyncStorage.removeItem('user');
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+    window.location.reload();
+  }
+};
+
+const readErrorMessage = async (response, fallback) => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    console.log('=== History API Debug ===');
-    console.log('Token found:', token ? 'Yes' : 'No');
-    console.log('Token value:', token?.substring(0, 50) + '...');
-    console.log('Token length:', token?.length || 0);
-    console.log('User ID:', userId);
-    console.log('API call data:', { userId, tableData: tableData?.substring(0, 100) + '...', action });
-    console.log('BASE_URL being used:', API_BASE_URL);
-    
-    // Test if token works with a simple API call
-    if (token) {
-      console.log('Testing token with existing API...');
-      try {
-        const testResponse = await fetch(`${API_BASE_URL}/api/process`, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "text/plain",
-            "Authorization": `Bearer ${token}`
-          },
-          body: "test",
-        });
-        console.log('Test API response status:', testResponse.status);
-      } catch (testError) {
-        console.log('Test API error:', testError.message);
-      }
+    const text = await response.text();
+    if (!text) return fallback;
+
+    try {
+      const data = JSON.parse(text);
+      return data.message || data.error || text;
+    } catch {
+      return text;
     }
+  } catch {
+    return fallback;
+  }
+};
+
+const getAuthToken = async () => {
+  const token = await AsyncStorage.getItem('token');
+  if (!token) {
+    throw new Error('Please login again to view history.');
+  }
+  return token;
+};
+
+const normalizeHistoryRecord = (record) => ({
+  ...record,
+  action: String(record.action || '').toLowerCase(),
+  customerName: record.customerName || '',
+});
+
+export const saveTableHistory = async (userId, tableData, action, customerName = '') => {
+  try {
+    if (!userId) {
+      throw new Error('Please login again to save history.');
+    }
+
+    const token = await getAuthToken();
     
     const response = await fetch(`${API_BASE_URL}/api/history/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         userId: userId,
         tableData: tableData,
         action: action, // 'save' or 'share'
+        customerName: customerName,
         timestamp: new Date().toISOString()
       })
     });
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', response.headers);
-
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error response:', errorText);
-      
       if (response.status === 401) {
-        // Clear expired token and trigger logout
-        await AsyncStorage.removeItem('token');
-        await AsyncStorage.removeItem('user');
-        
-        // Trigger page reload to logout user
-        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
-          window.location.reload();
-        }
-        
+        await clearSessionIfExpired();
         throw new Error('Your session has expired. Please login again to save history.');
       }
-      
-      throw new Error(`Failed to save table history: ${response.status} - ${errorText}`);
+
+      const errorText = await readErrorMessage(response, 'Failed to save history.');
+      throw new Error(errorText);
     }
 
-    const result = await response.json();
-    console.log('Success response:', result);
-    return result;
+    return await response.json();
   } catch (error) {
     console.error('Save history error:', error);
     throw error;
@@ -81,23 +86,33 @@ export const saveTableHistory = async (userId, tableData, action) => {
 
 export const getUserHistory = async (userId) => {
   try {
-    const token = await AsyncStorage.getItem('token');
+    if (!userId) {
+      throw new Error('Please login again to view history.');
+    }
+
+    const token = await getAuthToken();
     
     const response = await fetch(`${API_BASE_URL}/api/history/user/${userId}`, {
       method: 'GET',
       headers: {
+        'Accept': 'application/json',
         'Authorization': `Bearer ${token}`
       }
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch user history');
+      if (response.status === 401) {
+        await clearSessionIfExpired();
+        throw new Error('Your session has expired. Please login again.');
+      }
+
+      const errorText = await readErrorMessage(response, 'Failed to fetch history.');
+      throw new Error(errorText);
     }
 
     const data = await response.json();
-    // Backend returns { history: [...], count: X }
-    // We need to return just the history array
-    return data.history || [];
+    const history = Array.isArray(data) ? data : data.history || [];
+    return history.map(normalizeHistoryRecord);
   } catch (error) {
     console.error('Fetch history error:', error);
     throw error;
@@ -106,22 +121,89 @@ export const getUserHistory = async (userId) => {
 
 export const getHistoryById = async (historyId) => {
   try {
-    const token = await AsyncStorage.getItem('token');
+    const token = await getAuthToken();
     
     const response = await fetch(`${API_BASE_URL}/api/history/${historyId}`, {
       method: 'GET',
       headers: {
+        'Accept': 'application/json',
         'Authorization': `Bearer ${token}`
       }
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch history record');
+      if (response.status === 401) {
+        await clearSessionIfExpired();
+        throw new Error('Your session has expired. Please login again.');
+      }
+
+      const errorText = await readErrorMessage(response, 'Failed to fetch history details.');
+      throw new Error(errorText);
+    }
+
+    return normalizeHistoryRecord(await response.json());
+  } catch (error) {
+    console.error('Fetch history detail error:', error);
+    throw error;
+  }
+};
+
+export const deleteHistoryById = async (historyId) => {
+  try {
+    const token = await getAuthToken();
+
+    const response = await fetch(`${API_BASE_URL}/api/history/${historyId}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        await clearSessionIfExpired();
+        throw new Error('Your session has expired. Please login again.');
+      }
+
+      const errorText = await readErrorMessage(response, 'Failed to delete history.');
+      throw new Error(errorText);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Fetch history detail error:', error);
+    console.error('Delete history error:', error);
+    throw error;
+  }
+};
+
+export const updateHistoryById = async (historyId, tableData, customerName = '') => {
+  try {
+    const token = await getAuthToken();
+
+    const response = await fetch(`${API_BASE_URL}/api/history/${historyId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ tableData, customerName })
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        await clearSessionIfExpired();
+        throw new Error('Your session has expired. Please login again.');
+      }
+
+      const errorText = await readErrorMessage(response, 'Failed to update history.');
+      throw new Error(errorText);
+    }
+
+    return normalizeHistoryRecord(await response.json());
+  } catch (error) {
+    console.error('Update history error:', error);
     throw error;
   }
 };

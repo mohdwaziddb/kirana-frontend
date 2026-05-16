@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   },
   headerGradient: {
     backgroundColor: COLORS.PRIMARY,
-    paddingTop: StatusBar.currentHeight + 24,
+    paddingTop: (StatusBar.currentHeight || 0) + 24,
     paddingBottom: 100,
     paddingHorizontal: 24,
     position: "relative",
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 150,
   },
   card: {
     backgroundColor: COLORS.WHITE,

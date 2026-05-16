@@ -19,6 +19,15 @@ export default function TextInputCard({ input, setInput, onProcess }) {
           placeholderTextColor={COLORS.TEXT_SECONDARY}
           style={styles.textInput}
         />
+        {input.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => setInput("")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.clearButtonText}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <TouchableOpacity
@@ -57,17 +66,35 @@ const styles = {
   },
   inputContainer: {
     marginBottom: SIZES.MARGIN_SM,
+    position: 'relative',
   },
   textInput: {
     borderWidth: 1,
     borderColor: COLORS.BORDER,
     backgroundColor: COLORS.GRAY_50,
     padding: SIZES.PADDING_BASE,
+    paddingRight: 40,
     borderRadius: SIZES.RADIUS_LG,
     height: 100,
     fontSize: SIZES.FONT_BASE,
     color: COLORS.TEXT_PRIMARY,
     textAlignVertical: 'top',
+  },
+  clearButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearButtonText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
   },
   button: {
     backgroundColor: '#0EA5A4',

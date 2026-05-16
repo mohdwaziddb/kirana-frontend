@@ -1,42 +1,59 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { COLORS, SIZES, FONTS, SHADOWS } from '../constants/theme';
 
-const ErrorPopup = ({ visible, message, onClose }) => {
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+const ErrorPopup = ({ visible, title = 'Something went wrong', message, onClose }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
     if (visible) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 70,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
     } else {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 140,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.9,
+          duration: 140,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  }, [visible, fadeAnim]);
+  }, [visible, fadeAnim, scaleAnim]);
 
   if (!visible) return null;
 
   return (
-    <Modal
-      transparent={true}
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <Animated.View style={[styles.popupContainer, { opacity: fadeAnim }]}>
-          <View style={styles.errorIcon}>
-            <Text style={styles.errorIconText}>⚠️</Text>
+        <Animated.View
+          style={[
+            styles.popupContainer,
+            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+          ]}
+        >
+          <View style={styles.errorIconBox}>
+            <Text style={styles.errorIconText}>!</Text>
           </View>
-          <Text style={styles.errorTitle}>Error</Text>
+          <Text style={styles.errorTitle}>{title}</Text>
           <Text style={styles.errorMessage}>{message}</Text>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose} activeOpacity={0.85}>
             <Text style={styles.closeButtonText}>OK</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -48,54 +65,65 @@ const ErrorPopup = ({ visible, message, onClose }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: SIZES.PADDING_XL,
   },
   popupContainer: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 25,
-    width: '80%',
-    maxWidth: 350,
+    backgroundColor: COLORS.WHITE,
+    borderRadius: SIZES.RADIUS_2XL,
+    padding: SIZES.PADDING_XL,
+    width: '100%',
+    maxWidth: 340,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    ...SHADOWS.LARGE,
   },
-  errorIcon: {
-    marginBottom: 15,
+  errorIconBox: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SIZES.MARGIN_BASE,
   },
   errorIconText: {
-    fontSize: 40,
+    fontSize: SIZES.FONT_2XL,
+    fontWeight: FONTS.EXTRABOLD,
+    color: COLORS.ERROR,
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
+    fontSize: SIZES.FONT_XL,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SIZES.MARGIN_SM,
+    textAlign: 'center',
   },
   errorMessage: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: SIZES.FONT_BASE,
+    color: COLORS.TEXT_SECONDARY,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: SIZES.MARGIN_LG,
     lineHeight: 22,
   },
   closeButton: {
-    backgroundColor: '#dc3545',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.PRIMARY,
+    height: SIZES.BUTTON_HEIGHT,
+    borderRadius: SIZES.RADIUS_LG,
     width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.SMALL,
   },
   closeButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: COLORS.WHITE,
+    fontSize: SIZES.FONT_BASE,
+    fontWeight: FONTS.BOLD,
   },
 });
 

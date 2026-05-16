@@ -1,7 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Modal, StyleSheet, ScrollView, Alert, StatusBar, Dimensions } from 'react-native';
-import { getUserHistory, getHistoryById } from '../services/historyApi';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, Modal, StyleSheet, ScrollView, Alert, StatusBar, Dimensions, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { getUserHistory, getHistoryById, deleteHistoryById, updateHistoryById } from '../services/historyApi';
+import CommonModal from '../components/CommonModal';
 import { COLORS, SIZES } from '../constants/theme';
+import { formatAwsDateTime, getAwsDateKey } from '../utils/awsTime';
 
 const { width } = Dimensions.get("window");
 
@@ -18,45 +22,190 @@ export default function HistoryScreen({ user }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedAction, setSelectedAction] = useState('all');
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
+  const [editingHistory, setEditingHistory] = useState(false);
+  const [editItems, setEditItems] = useState([]);
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
 
-  useEffect(() => {
-    fetchUserHistory();
-  }, []);
+  const getCurrentUserId = async () => {
+    if (user?.id) return user.id;
+
+    const storedUser = await AsyncStorage.getItem('user');
+    if (!storedUser) return null;
+
+    try {
+      return JSON.parse(storedUser)?.id || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const parseTableData = (tableData) => {
+    if (Array.isArray(tableData)) return tableData;
+
+    try {
+      const parsed = JSON.parse(tableData || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const normalizeEditableItems = (items) => {
+    const normalized = (Array.isArray(items) ? items : []).map((item) => {
+      const quantity = item.quantity == null ? '' : String(item.quantity);
+      const price = item.price == null ? '' : String(item.price);
+      return {
+        name: item.name || '',
+        quantity,
+        price,
+        total: (parseFloat(quantity) || 0) * (parseFloat(price) || 0),
+        matched: item.matched || false,
+      };
+    });
+
+    return normalized.length > 0
+      ? normalized
+      : [{ name: '', quantity: '', price: '', total: 0, matched: false }];
+  };
 
   const fetchUserHistory = async () => {
     try {
       setLoading(true);
-      const history = await getUserHistory(user.id);
+      const userId = await getCurrentUserId();
+
+      if (!userId) {
+        throw new Error('Please login again to view history.');
+      }
+
+      const history = await getUserHistory(userId);
       setHistoryList(history);
     } catch (error) {
       console.error('History fetch error:', error);
-      Alert.alert('Error', 'Failed to fetch history');
+      Alert.alert('Error', error.message || 'Failed to fetch history');
     } finally {
       setLoading(false);
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserHistory();
+    }, [user?.id])
+  );
+
   const handleHistoryPress = async (historyItem) => {
     try {
       const detailedHistory = await getHistoryById(historyItem.id);
-      setSelectedHistory(detailedHistory);
+      const mergedHistory = {
+        ...historyItem,
+        ...detailedHistory,
+        customerName: detailedHistory.customerName || historyItem.customerName || '',
+      };
+      setSelectedHistory(mergedHistory);
+      setEditItems(normalizeEditableItems(parseTableData(mergedHistory.tableData)));
+      setEditCustomerName(mergedHistory.customerName || '');
+      setEditingHistory(false);
       setModalVisible(true);
     } catch (error) {
-      Alert.alert('Error', 'Failed to fetch details');
+      Alert.alert('Error', error.message || 'Failed to fetch details');
+    }
+  };
+
+  const deleteHistoryRecord = async (historyItem) => {
+    try {
+      setDeletingId(historyItem.id);
+      await deleteHistoryById(historyItem.id);
+      setHistoryList(prev => prev.filter(item => item.id !== historyItem.id));
+
+      if (selectedHistory?.id === historyItem.id) {
+        setModalVisible(false);
+        setSelectedHistory(null);
+      }
+
+      setShowDeleteSuccess(true);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to delete history');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteHistory = (historyItem) => {
+    setDeleteCandidate(historyItem);
+    setShowDeleteConfirm(true);
+  };
+
+  const updateEditItem = (index, field, value) => {
+    setEditItems((currentItems) => {
+      const nextItems = [...currentItems];
+      nextItems[index] = { ...nextItems[index], [field]: value };
+
+      const quantity = parseFloat(nextItems[index].quantity) || 0;
+      const price = parseFloat(nextItems[index].price) || 0;
+      nextItems[index].total = quantity * price;
+
+      return nextItems;
+    });
+  };
+
+  const addEditRow = () => {
+    setEditItems((currentItems) => [
+      ...currentItems,
+      { name: '', quantity: '', price: '', total: 0, matched: false },
+    ]);
+  };
+
+  const deleteEditRow = (index) => {
+    setEditItems((currentItems) => {
+      const nextItems = currentItems.filter((_, itemIndex) => itemIndex !== index);
+      return nextItems.length > 0
+        ? nextItems
+        : [{ name: '', quantity: '', price: '', total: 0, matched: false }];
+    });
+  };
+
+  const handleSaveEditedHistory = async () => {
+    try {
+      const validItems = editItems
+        .filter(item => item.name && item.name.trim() !== '')
+        .map(item => ({
+          name: String(item.name || ''),
+          quantity: String(item.quantity || ''),
+          price: String(parseFloat(item.price) || 0),
+          total: parseFloat(item.total) || 0,
+          matched: item.matched || false,
+        }));
+
+      if (validItems.length === 0) {
+        Alert.alert('Error', 'Please add at least one item before saving');
+        return;
+      }
+
+      setSavingEdit(true);
+      const updatedHistory = await updateHistoryById(selectedHistory.id, JSON.stringify(validItems), editCustomerName.trim());
+      setSelectedHistory(updatedHistory);
+      setHistoryList(prev => prev.map(item => item.id === updatedHistory.id ? updatedHistory : item));
+      setEditItems(normalizeEditableItems(validItems));
+      setEditCustomerName(updatedHistory.customerName || '');
+      setEditingHistory(false);
+      Alert.alert('Saved', 'History record updated successfully.');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to update history record');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
   const formatDate = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatAwsDateTime(timestamp);
   };
 
   const formatFilterDate = (date) => {
@@ -69,16 +218,18 @@ export default function HistoryScreen({ user }) {
   };
 
   const getDateKey = (date) => {
-    const d = date instanceof Date ? date : new Date(date);
-    if (Number.isNaN(d.getTime())) return '';
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return getAwsDateKey(date);
   };
 
   const filteredHistoryList = useMemo(() => {
-    if (!selectedDate) return historyList;
-    const selectedDateKey = getDateKey(selectedDate);
-    return historyList.filter((item) => getDateKey(item.timestamp) === selectedDateKey);
-  }, [historyList, selectedDate]);
+    const selectedDateKey = selectedDate ? getDateKey(selectedDate) : null;
+
+    return historyList.filter((item) => {
+      const matchesDate = !selectedDateKey || getDateKey(item.timestamp) === selectedDateKey;
+      const matchesAction = selectedAction === 'all' || item.action === selectedAction;
+      return matchesDate && matchesAction;
+    });
+  }, [historyList, selectedDate, selectedAction]);
 
   const openCalendar = () => {
     setCalendarMonth(selectedDate || new Date());
@@ -114,11 +265,17 @@ export default function HistoryScreen({ user }) {
   };
 
   const getTodayKey = () => getDateKey(new Date());
+  const hasActiveFilter = selectedDate || selectedAction !== 'all';
+
+  const clearFilters = () => {
+    setSelectedDate(null);
+    setSelectedAction('all');
+  };
 
   // Stats
   const totalShared = filteredHistoryList.filter(h => h.action === 'share').length;
   const totalSaved = filteredHistoryList.filter(h => h.action === 'save').length;
-  const totalAmount = filteredHistoryList.reduce((sum, h) => sum + calculateGrandTotal(JSON.parse(h.tableData)), 0);
+  const totalAmount = filteredHistoryList.reduce((sum, h) => sum + calculateGrandTotal(parseTableData(h.tableData)), 0);
 
   const renderCalendarModal = () => {
     const days = getCalendarDays();
@@ -185,7 +342,7 @@ export default function HistoryScreen({ user }) {
   };
 
   const renderHistoryItem = ({ item }) => {
-    const tableData = JSON.parse(item.tableData);
+    const tableData = parseTableData(item.tableData);
     return (
       <TouchableOpacity style={styles.historyCard} onPress={() => handleHistoryPress(item)} activeOpacity={0.8}>
         <View style={styles.cardTop}>
@@ -195,7 +352,20 @@ export default function HistoryScreen({ user }) {
               {item.action === 'share' ? 'Shared' : 'Saved'}
             </Text>
           </View>
-          <Text style={styles.dateLabel}>{formatDate(item.timestamp)}</Text>
+          <View style={styles.cardMeta}>
+            <Text style={styles.dateLabel}>{formatDate(item.timestamp)}</Text>
+            <TouchableOpacity
+              style={[styles.cardDeleteBtn, deletingId === item.id && styles.disabledBtn]}
+              onPress={(event) => {
+                event?.stopPropagation?.();
+                handleDeleteHistory(item);
+              }}
+              disabled={deletingId === item.id}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cardDeleteText}>{deletingId === item.id ? 'Deleting...' : 'Delete'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.cardBody}>
@@ -205,18 +375,21 @@ export default function HistoryScreen({ user }) {
           </View>
           <View style={styles.dividerLine} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>₹{calculateGrandTotal(tableData)}</Text>
+            <Text style={styles.statValue}>Rs {calculateGrandTotal(tableData)}</Text>
             <Text style={styles.statLabel}>Total</Text>
           </View>
         </View>
+        <Text style={styles.customerCardText}>Customer: {item.customerName || '-'}</Text>
       </TouchableOpacity>
     );
   };
 
   const renderDetailModal = () => {
     if (!selectedHistory) return null;
-    const tableData = JSON.parse(selectedHistory.tableData);
-    const grandTotal = calculateGrandTotal(tableData);
+    const tableData = parseTableData(selectedHistory.tableData);
+    const displayedTableData = editingHistory ? editItems : tableData;
+    const grandTotal = calculateGrandTotal(displayedTableData);
+    const canEditRecord = selectedHistory.action === 'share' || selectedHistory.action === 'save';
 
     return (
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setModalVisible(false)}>
@@ -231,26 +404,91 @@ export default function HistoryScreen({ user }) {
                   {selectedHistory.action === 'share' ? 'Shared Record' : 'Saved Record'}
                 </Text>
                 <Text style={styles.detailDate}>{formatDate(selectedHistory.timestamp)}</Text>
+                <Text style={styles.detailCustomer}>Customer: {selectedHistory.customerName || '-'}</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setModalVisible(false)}>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => { setEditingHistory(false); setModalVisible(false); }}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.detailBody}>
+          <ScrollView
+            style={styles.detailBody}
+            contentContainerStyle={styles.detailBodyContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.summaryCard}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>Total Items</Text>
-                <Text style={styles.summaryValue}>{tableData.length}</Text>
+                <Text style={styles.summaryValue}>{displayedTableData.length}</Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>Grand Total</Text>
-                <Text style={styles.summaryAmount}>₹{grandTotal}</Text>
+                <Text style={styles.summaryAmount}>Rs {grandTotal}</Text>
               </View>
             </View>
 
+            {editingHistory && (
+              <View style={styles.customerEditCard}>
+                <Text style={styles.customerEditLabel}>Customer Name</Text>
+                <TextInput
+                  style={styles.customerEditInput}
+                  value={editCustomerName}
+                  placeholder="Customer name"
+                  placeholderTextColor={COLORS.TEXT_SECONDARY}
+                  onChangeText={setEditCustomerName}
+                />
+              </View>
+            )}
+
+            {editingHistory ? (
+              <View style={styles.tableCard}>
+                <View style={styles.tableHead}>
+                  <Text style={[styles.th, { flex: 2 }]}>Item</Text>
+                  <Text style={[styles.th, { flex: 1 }]}>Qty</Text>
+                  <Text style={[styles.th, { flex: 1 }]}>Price</Text>
+                  <Text style={[styles.th, { flex: 1.4 }]}>Total</Text>
+                </View>
+                {editItems.map((item, idx) => (
+                  <View key={idx} style={styles.tr}>
+                    <TextInput
+                      style={[styles.editInput, styles.editInputLeft, { flex: 2 }]}
+                      value={String(item.name || '')}
+                      placeholder="Item"
+                      onChangeText={(value) => updateEditItem(idx, 'name', value)}
+                    />
+                    <TextInput
+                      style={[styles.editInput, { flex: 1 }]}
+                      value={String(item.quantity || '')}
+                      placeholder="Qty"
+                      keyboardType="numeric"
+                      onChangeText={(value) => updateEditItem(idx, 'quantity', value)}
+                    />
+                    <TextInput
+                      style={[styles.editInput, { flex: 1 }]}
+                      value={String(item.price || '')}
+                      placeholder="Price"
+                      keyboardType="numeric"
+                      onChangeText={(value) => updateEditItem(idx, 'price', value)}
+                    />
+                    <View style={styles.editTotalCell}>
+                      <Text style={styles.editTotalText}>Rs {item.total || 0}</Text>
+                      <TouchableOpacity style={styles.editDeleteRowBtn} onPress={() => deleteEditRow(idx)}>
+                        <Text style={styles.editDeleteRowText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.addEditRowBtn} onPress={addEditRow} activeOpacity={0.8}>
+                  <Text style={styles.addEditRowText}>+ Add Row</Text>
+                </TouchableOpacity>
+                <View style={styles.tableTotal}>
+                  <Text style={styles.totalLabel}>Total</Text>
+                  <Text style={styles.totalAmount}>Rs {grandTotal}</Text>
+                </View>
+              </View>
+            ) : (
             <View style={styles.tableCard}>
               <View style={styles.tableHead}>
                 <Text style={[styles.th, { flex: 2 }]}>Item</Text>
@@ -262,15 +500,78 @@ export default function HistoryScreen({ user }) {
                 <View key={idx} style={styles.tr}>
                   <Text style={[styles.td, { flex: 2 }]} numberOfLines={1}>{item.name}</Text>
                   <Text style={[styles.td, { flex: 1 }]}>{item.quantity}</Text>
-                  <Text style={[styles.td, { flex: 1 }]}>₹{item.price}</Text>
-                  <Text style={[styles.td, { flex: 1 }]}>₹{item.total}</Text>
+                  <Text style={[styles.td, { flex: 1 }]}>Rs {item.price}</Text>
+                  <Text style={[styles.td, { flex: 1 }]}>Rs {item.total}</Text>
                 </View>
               ))}
               <View style={styles.tableTotal}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalAmount}>₹{grandTotal}</Text>
+                <Text style={styles.totalAmount}>Rs {grandTotal}</Text>
               </View>
             </View>
+            )}
+            {canEditRecord && (
+              <View style={styles.detailActionRow}>
+                {editingHistory ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.detailSecondaryBtn, savingEdit && styles.disabledBtn]}
+                      onPress={() => {
+                        setEditItems(normalizeEditableItems(tableData));
+                        setEditCustomerName(selectedHistory.customerName || '');
+                        setEditingHistory(false);
+                      }}
+                      disabled={savingEdit}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.detailSecondaryText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.detailSaveEditBtn, savingEdit && styles.disabledBtn]}
+                      onPress={handleSaveEditedHistory}
+                      disabled={savingEdit}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.detailSaveEditText}>
+                        {savingEdit ? 'Saving...' : 'Save Changes'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.detailEditBtn}
+                    onPress={() => {
+                      setEditItems(normalizeEditableItems(tableData));
+                      setEditCustomerName(selectedHistory.customerName || '');
+                      setEditingHistory(true);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.detailEditText}>Edit Record</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.detailDeleteBtn, deletingId === selectedHistory.id && styles.disabledBtn]}
+              onPress={() => handleDeleteHistory(selectedHistory)}
+              disabled={deletingId === selectedHistory.id}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.detailDeleteText}>
+                {deletingId === selectedHistory.id ? 'Deleting...' : 'Delete History'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.closeRecordBtn}
+              onPress={() => {
+                setEditingHistory(false);
+                setModalVisible(false);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.closeRecordText}>Close Record</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </Modal>
@@ -307,7 +608,7 @@ export default function HistoryScreen({ user }) {
                 <Text style={styles.statText}>Records</Text>
               </View>
               <View style={styles.statBox}>
-                <Text style={styles.statNumber}>₹{totalAmount}</Text>
+                <Text style={styles.statNumber}>Rs {totalAmount}</Text>
                 <Text style={styles.statText}>Total Amount</Text>
               </View>
             </View>
@@ -318,7 +619,7 @@ export default function HistoryScreen({ user }) {
       {/* Filter Bar */}
       <View style={styles.filterBar}>
         <View style={styles.filterInfo}>
-          <Text style={styles.filterTitle}>Filter by Date</Text>
+          <Text style={styles.filterTitle}>Filter History</Text>
           <Text style={styles.filterSubtitle}>
             {`${filteredHistoryList.length} records`}
           </Text>
@@ -327,11 +628,32 @@ export default function HistoryScreen({ user }) {
           <Text style={styles.dateBtnIcon}>📅</Text>
           <Text style={styles.dateBtnText}>{formatFilterDate(selectedDate)}</Text>
         </TouchableOpacity>
-        {selectedDate && (
-          <TouchableOpacity style={styles.clearBtnSmall} onPress={() => setSelectedDate(null)}>
+        {hasActiveFilter && (
+          <TouchableOpacity style={styles.clearBtnSmall} onPress={clearFilters}>
             <Text style={styles.clearBtnSmallText}>✕</Text>
           </TouchableOpacity>
         )}
+        <View style={styles.actionFilterRow}>
+          {[
+            { label: 'All', value: 'all' },
+            { label: 'Shared', value: 'share' },
+            { label: 'Saved', value: 'save' },
+          ].map((filter) => {
+            const active = selectedAction === filter.value;
+            return (
+              <TouchableOpacity
+                key={filter.value}
+                style={[styles.actionFilterBtn, active && styles.actionFilterBtnActive]}
+                onPress={() => setSelectedAction(filter.value)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.actionFilterText, active && styles.actionFilterTextActive]}>
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       {/* Content */}
@@ -345,8 +667,8 @@ export default function HistoryScreen({ user }) {
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>🔍</Text>
           <Text style={styles.emptyTitle}>No Records Found</Text>
-          <Text style={styles.emptyText}>Try a different date or clear filter</Text>
-          <TouchableOpacity style={styles.clearFilterBtn} onPress={() => setSelectedDate(null)}>
+          <Text style={styles.emptyText}>Try a different date or action filter</Text>
+          <TouchableOpacity style={styles.clearFilterBtn} onPress={clearFilters}>
             <Text style={styles.clearFilterText}>Clear Filter</Text>
           </TouchableOpacity>
         </View>
@@ -362,6 +684,41 @@ export default function HistoryScreen({ user }) {
 
       {renderCalendarModal()}
       {renderDetailModal()}
+
+      <CommonModal
+        visible={showDeleteConfirm}
+        type="confirm"
+        image="?"
+        title="Delete History"
+        message="Do you want to delete this record?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        showCancel={true}
+        onCancel={() => {
+          setShowDeleteConfirm(false);
+          setDeleteCandidate(null);
+        }}
+        onConfirm={() => {
+          const itemToDelete = deleteCandidate;
+          setShowDeleteConfirm(false);
+          setDeleteCandidate(null);
+          if (itemToDelete) {
+            deleteHistoryRecord(itemToDelete);
+          }
+        }}
+      />
+
+      <CommonModal
+        visible={showDeleteSuccess}
+        type="success"
+        image="✅"
+        title="Successfully Deleted"
+        message="History record deleted."
+        confirmText="OK"
+        showOnlyConfirm={true}
+        autoCloseTime={800}
+        onConfirm={() => setShowDeleteSuccess(false)}
+      />
     </View>
   );
 }
@@ -387,7 +744,7 @@ const styles = StyleSheet.create({
   },
   headerGradient: {
     backgroundColor: COLORS.PRIMARY,
-    paddingTop: StatusBar.currentHeight + 20,
+    paddingTop: (StatusBar.currentHeight || 0) + 20,
     paddingBottom: 90,
     paddingHorizontal: 24,
     position: 'relative',
@@ -461,6 +818,7 @@ const styles = StyleSheet.create({
   // Filter Bar
   filterBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     backgroundColor: COLORS.WHITE,
     marginHorizontal: 16,
@@ -475,6 +833,7 @@ const styles = StyleSheet.create({
   },
   filterInfo: {
     flex: 1,
+    minWidth: 120,
   },
   filterTitle: {
     fontSize: 15,
@@ -516,12 +875,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#E53935',
   },
+  actionFilterRow: {
+    width: '100%',
+    flexDirection: 'row',
+    backgroundColor: '#F5F7FA',
+    borderRadius: 12,
+    padding: 4,
+    marginTop: 14,
+  },
+  actionFilterBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  actionFilterBtnActive: {
+    backgroundColor: COLORS.PRIMARY,
+  },
+  actionFilterText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.TEXT_SECONDARY,
+  },
+  actionFilterTextActive: {
+    color: COLORS.WHITE,
+  },
 
   // List
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 20,
-    paddingBottom: 40,
+    paddingBottom: 150,
   },
 
   // History Card
@@ -573,6 +957,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.TEXT_SECONDARY,
   },
+  cardMeta: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  cardDeleteBtn: {
+    backgroundColor: '#FFEBEE',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  cardDeleteText: {
+    color: '#D32F2F',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  disabledBtn: {
+    opacity: 0.6,
+  },
   cardBody: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -599,6 +1002,12 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_SECONDARY,
     marginTop: 4,
   },
+  customerCardText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: 10,
+  },
 
   // Empty State
   emptyContainer: {
@@ -606,6 +1015,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+    paddingBottom: 150,
   },
   emptyIcon: {
     fontSize: 60,
@@ -791,6 +1201,12 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_SECONDARY,
     marginTop: 2,
   },
+  detailCustomer: {
+    fontSize: 13,
+    color: COLORS.TEXT_PRIMARY,
+    marginTop: 2,
+    fontWeight: '600',
+  },
   closeBtn: {
     width: 36,
     height: 36,
@@ -806,6 +1222,9 @@ const styles = StyleSheet.create({
   detailBody: {
     flex: 1,
     padding: 16,
+  },
+  detailBodyContent: {
+    paddingBottom: 36,
   },
   summaryCard: {
     flexDirection: 'row',
@@ -842,15 +1261,107 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.PRIMARY,
   },
-  tableCard: {
+  customerEditCard: {
     backgroundColor: COLORS.WHITE,
     borderRadius: 16,
     padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
+  },
+  customerEditLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.TEXT_SECONDARY,
+    marginBottom: 8,
+  },
+  customerEditInput: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#E8EAED',
+    borderRadius: 10,
+    backgroundColor: '#F8F9FB',
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  tableCard: {
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  detailActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  detailEditBtn: {
+    flex: 1,
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  detailEditText: {
+    color: COLORS.WHITE,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  detailSaveEditBtn: {
+    flex: 1,
+    backgroundColor: '#16A34A',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  detailSaveEditText: {
+    color: COLORS.WHITE,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  detailSecondaryBtn: {
+    flex: 1,
+    backgroundColor: '#EEF2F7',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  detailSecondaryText: {
+    color: COLORS.TEXT_PRIMARY,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  detailDeleteBtn: {
+    backgroundColor: '#D32F2F',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  detailDeleteText: {
+    color: COLORS.WHITE,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  closeRecordBtn: {
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  closeRecordText: {
+    color: COLORS.WHITE,
+    fontSize: 15,
+    fontWeight: '700',
   },
   tableHead: {
     flexDirection: 'row',
@@ -870,6 +1381,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F2F5',
+    alignItems: 'center',
+    gap: 6,
   },
   td: {
     fontSize: 13,
@@ -883,6 +1396,59 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginTop: 8,
+  },
+  editInput: {
+    backgroundColor: '#F8F9FB',
+    borderWidth: 1,
+    borderColor: '#E8EAED',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+  },
+  editInputLeft: {
+    textAlign: 'left',
+  },
+  editTotalCell: {
+    flex: 1.4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  editTotalText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+  },
+  editDeleteRowBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFEBEE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editDeleteRowText: {
+    color: '#D32F2F',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  addEditRowBtn: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  addEditRowText: {
+    color: '#E65100',
+    fontSize: 14,
+    fontWeight: '700',
   },
   totalLabel: {
     fontSize: 15,

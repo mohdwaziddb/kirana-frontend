@@ -1,11 +1,12 @@
 import React, { useRef, useState, useEffect } from "react";
-import { ScrollView, Text, View, StyleSheet, StatusBar, Alert, TouchableOpacity } from "react-native";
+import { ScrollView, Text, View, StyleSheet, StatusBar, TouchableOpacity, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { processTextAPI } from "../services/textApi";
 import { uploadImageAPI } from "../services/imageApi";
 import TextInputCard from "../components/TextInputCard";
 import EditableTable from "../components/EditableTable";
+import CommonModal from "../components/CommonModal";
 import { COLORS } from "../constants/theme";
 
 export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, navigation, openGalleryOnMount, onGalleryOpened }) {
@@ -15,6 +16,8 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
   const [items, setItems] = useState([]);
   const [showResult, setShowResult] = useState(false);
   const [extractedText, setExtractedText] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [imageError, setImageError] = useState({ visible: false, message: "" });
 
   const mergeUserData = (nextUser) => {
     if (!nextUser) return;
@@ -57,32 +60,90 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
 
   const updateUserHandler = onUpdateUser || mergeUserData;
 
+  const normalizeItems = (value) => {
+    if (!Array.isArray(value)) return [];
+
+    return value
+      .filter(Boolean)
+      .map((item) => {
+        const quantity = item.quantity == null ? "" : String(item.quantity);
+        const price = item.price == null ? "" : String(item.price);
+        return {
+          name: item.name || item.itemName || item.item || "",
+          quantity,
+          price,
+          total: item.total || ((parseFloat(quantity) || 0) * (parseFloat(price) || 0)),
+          matched: item.matched || false,
+        };
+      })
+      .filter((item) => item.name.trim() !== "");
+  };
+
+  const appendItemsToTable = (nextItems) => {
+    const normalizedItems = normalizeItems(nextItems);
+    if (normalizedItems.length === 0) return [];
+
+    setItems((currentItems) => {
+      const existingItems = normalizeItems(currentItems);
+      return [...existingItems, ...normalizedItems];
+    });
+
+    setShowResult(true);
+    return normalizedItems;
+  };
+
   const handleText = async () => {
     if (!input.trim()) return;
     const data = await processTextAPI(input);
-    setItems(data);
-    setShowResult(true);
+    appendItemsToTable(data);
   };
 
   const handleGalleryScan = async () => {
     try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          setImageError({ visible: true, message: "Please allow photo access to select an image." });
+          return;
+        }
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images',
+        mediaTypes: ['images'],
         allowsEditing: true,
-        aspect: [4, 3],
         quality: 0.9,
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        const data = await uploadImageAPI(imageUri, setExtractedText);
-        setItems(data);
-        setShowResult(true);
-        Alert.alert('Success! 🎉', 'Items extracted from image and added to list!');
+        let imageResult;
+        try {
+          imageResult = await uploadImageAPI(imageUri, setExtractedText);
+        } catch (uploadError) {
+          console.log('Image upload error:', uploadError);
+          setImageError({ visible: true, message: uploadError.message || "Image selected, but upload failed. Please try again." });
+          return;
+        }
+
+        const extractedItems = normalizeItems(imageResult.items);
+
+        if (extractedItems.length === 0) {
+          const hasOcrText = imageResult.extractedText && !imageResult.extractedText.startsWith("Error:");
+          setImageError({
+            visible: true,
+            message: hasOcrText
+              ? "Image text was read, but no table items were found. Please try a clearer image."
+              : imageResult.extractedText || "No items found in this image. Please try another image.",
+          });
+          return;
+        }
+
+        appendItemsToTable(extractedItems);
+        setShowSuccessModal(true);
       }
     } catch (error) {
       console.log('Gallery error:', error);
-      Alert.alert('Error', 'Unable to select image. Please try again.');
+      setImageError({ visible: true, message: "Unable to select image. Please try again." });
     }
   };
 
@@ -137,9 +198,30 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
           storeName={user?.name}
           onUpdateUser={updateUserHandler}
         />
-
-        <View style={{ height: 100 }} />
       </ScrollView>
+
+      <CommonModal
+        visible={showSuccessModal}
+        type="success"
+        image="🎉"
+        title="Success!"
+        message="Items extracted from image and added to list!"
+        confirmText="Great"
+        showOnlyConfirm={true}
+        autoCloseTime={1200}
+        onConfirm={() => setShowSuccessModal(false)}
+      />
+
+      <CommonModal
+        visible={imageError.visible}
+        type="error"
+        image="❌"
+        title="Image Error"
+        message={imageError.message}
+        confirmText="OK"
+        showOnlyConfirm={true}
+        onConfirm={() => setImageError({ visible: false, message: "" })}
+      />
     </View>
   );
 }
@@ -166,7 +248,7 @@ const styles = StyleSheet.create({
   },
   headerGradient: {
     backgroundColor: COLORS.PRIMARY,
-    paddingTop: StatusBar.currentHeight + 16,
+    paddingTop: (StatusBar.currentHeight || 0) + 16,
     paddingBottom: 70,
     paddingHorizontal: 24,
     position: 'relative',
@@ -224,6 +306,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 34,
-    paddingBottom: 40,
+    paddingBottom: 150,
   },
 });

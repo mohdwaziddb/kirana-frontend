@@ -1,82 +1,65 @@
-// services/imageApi.js
-
-import { BASE_URL } from "./baseUrl";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+import { BASE_URL } from "./baseUrl";
 
 export const uploadImageAPI = async (image, setExtractedText) => {
-
   if (!image) {
-    console.log("❌ No image selected");
     throw new Error("No image selected");
   }
 
-  console.log("📸 IMAGE:", image);
+  let fileBody = null;
 
-  let blob = null;
-
-  // 🔥 Handle file:// URI (from Expo ImagePicker)
   if (typeof image === "string" && image.startsWith("file://")) {
-    console.log("🔄 Converting file URI to Blob...");
-    try {
-      const response = await fetch(image);
-      blob = await response.blob();
-    } catch (err) {
-      console.log("❌ Error converting file URI:", err);
-      throw new Error("Failed to read image file");
-    }
-  }
-  // 🔥 Handle blob URL
-  else if (typeof image === "string" && image.startsWith("blob:")) {
-    console.log("🔄 Converting blob URL to Blob...");
-    const response = await fetch(image);
-    blob = await response.blob();
-  }
-  // Handle File/Blob objects
-  else if (image instanceof File || image instanceof Blob) {
-    blob = image;
-  }
-  // Unknown format
-  else {
-    console.log("❌ Unsupported image format:", typeof image);
+    fileBody = Platform.OS === "web"
+      ? await (await fetch(image)).blob()
+      : { uri: image, name: "photo.jpg", type: "image/jpeg" };
+  } else if (typeof image === "string" && image.startsWith("blob:")) {
+    fileBody = await (await fetch(image)).blob();
+  } else if (
+    (typeof File !== "undefined" && image instanceof File) ||
+    (typeof Blob !== "undefined" && image instanceof Blob)
+  ) {
+    fileBody = image;
+  } else {
     throw new Error("Invalid image format");
   }
 
   const formData = new FormData();
-  formData.append("file", blob, "photo.jpg");
-
-  try {
-    // Get JWT token from AsyncStorage
-    const token = await AsyncStorage.getItem("token");
-    
-    const res = await fetch(`${BASE_URL}/api/upload-image`, {
-      method: "POST",
-      body: formData,
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.log("❌ Server error:", text);
-      throw new Error("Upload failed");
-    }
-
-    const data = await res.json();
-
-    console.log("📥 Image Response:", data);
-
-    // 🔥 Store extracted text if callback provided
-    if (setExtractedText && data.extractedText) {
-      setExtractedText(data.extractedText);
-    }
-
-    // Return items array
-    return data.items || data;
-
-  } catch (err) {
-    console.log("❌ Upload API error:", err);
-    throw err;
+  if (Platform.OS === "web") {
+    formData.append("file", fileBody, "photo.jpg");
+  } else {
+    formData.append("file", fileBody);
   }
+
+  const token = await AsyncStorage.getItem("token");
+
+  const res = await fetch(`${BASE_URL}/api/upload-image`, {
+    method: "POST",
+    body: formData,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Upload failed");
+  }
+
+  const data = await res.json();
+
+  const items = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.items)
+    ? data.items
+    : [];
+
+  const extractedText = typeof data?.extractedText === "string" ? data.extractedText : "";
+
+  if (setExtractedText && extractedText) {
+    setExtractedText(extractedText);
+  }
+
+  return { items, extractedText, raw: data };
 };
