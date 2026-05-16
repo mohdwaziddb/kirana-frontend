@@ -1352,7 +1352,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closeRecordBtn: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#475569',
     borderRadius: 14,
     paddingVertical: 15,
     alignItems: 'center',
