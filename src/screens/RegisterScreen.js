@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ErrorPopup from "../components/ErrorPopup";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
@@ -130,7 +130,7 @@ export default function RegisterScreen({ navigation, onLogin }) {
           <View style={styles.circleTop} />
           <View style={styles.circleBottom} />
           <View style={styles.logo}>
-            <Text style={styles.logoText}>KS</Text>
+            <Image source={require("../../assets/icon.png")} style={styles.logoImage} />
           </View>
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Start building item lists faster</Text>
@@ -347,10 +347,11 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.MARGIN_BASE,
     ...SHADOWS.MEDIUM,
   },
-  logoText: {
-    fontSize: SIZES.FONT_2XL,
-    fontWeight: FONTS.EXTRABOLD,
-    color: COLORS.PRIMARY,
+  logoImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    resizeMode: "contain",
   },
   title: {
     fontSize: SIZES.FONT_3XL,

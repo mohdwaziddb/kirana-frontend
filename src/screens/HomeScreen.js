@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { ScrollView, Text, View, StyleSheet, StatusBar, TouchableOpacity, Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Keyboard, KeyboardAvoidingView, ScrollView, Text, View, StyleSheet, StatusBar, TouchableOpacity, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { processTextAPI } from "../services/textApi";
 import { uploadImageAPI } from "../services/imageApi";
@@ -11,6 +10,8 @@ import { COLORS } from "../constants/theme";
 
 export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, navigation, openGalleryOnMount, onGalleryOpened }) {
 
+  const scrollRef = useRef(null);
+  const scrollYRef = useRef(0);
   const [user, setUser] = useState(initialUser);
   const [input, setInput] = useState("");
   const [items, setItems] = useState([]);
@@ -18,12 +19,21 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
   const [extractedText, setExtractedText] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [imageError, setImageError] = useState({ visible: false, message: "" });
+  const [isProcessingText, setIsProcessingText] = useState(false);
+
+  const areUsersEqual = (currentUser, nextUser) => {
+    if (!currentUser && !nextUser) return true;
+    if (!currentUser || !nextUser) return false;
+
+    const keys = ["id", "name", "email", "username", "mobile", "role"];
+    return keys.every((key) => String(currentUser?.[key] ?? "") === String(nextUser?.[key] ?? ""));
+  };
 
   const mergeUserData = (nextUser) => {
     if (!nextUser) return;
     setUser((currentUser) => {
       const mergedUser = { ...(currentUser || {}), ...nextUser };
-      return JSON.stringify(mergedUser) === JSON.stringify(currentUser) ? currentUser : mergedUser;
+      return areUsersEqual(currentUser, mergedUser) ? currentUser : mergedUser;
     });
   };
 
@@ -32,20 +42,10 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
   }, [initialUser]);
 
   useEffect(() => {
-    const checkUserUpdate = async () => {
-      try {
-        const userStr = await AsyncStorage.getItem("user");
-        if (userStr) {
-          const userData = JSON.parse(userStr);
-          mergeUserData(userData);
-        }
-      } catch (error) {
-        console.error("Error checking user update:", error);
-      }
-    };
-    checkUserUpdate();
-    const interval = setInterval(checkUserUpdate, 2000);
-    return () => clearInterval(interval);
+    Keyboard.dismiss();
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      document.activeElement?.blur?.();
+    }
   }, []);
 
   useEffect(() => {
@@ -92,10 +92,93 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
     return normalizedItems;
   };
 
+  const replaceTableItems = (nextItems) => {
+    const normalizedItems = normalizeItems(nextItems);
+    setItems(normalizedItems);
+    setShowResult(normalizedItems.length > 0);
+    return normalizedItems;
+  };
+
   const handleText = async () => {
-    if (!input.trim()) return;
-    const data = await processTextAPI(input);
-    appendItemsToTable(data);
+    if (!input.trim() || isProcessingText) return;
+
+    try {
+      setIsProcessingText(true);
+      const data = await processTextAPI(input, user?.id);
+      replaceTableItems(filterProcessedItems(data, input));
+    } finally {
+      setIsProcessingText(false);
+    }
+  };
+
+  const filterProcessedItems = (processedItems, sourceText) => {
+    if (!Array.isArray(processedItems)) return [];
+
+    const tokens = getInputItemTokens(sourceText);
+    if (tokens.length === 0) return [];
+
+    return tokens
+      .map((token) => findBestProcessedItem(processedItems, token))
+      .filter(Boolean);
+  };
+
+  const findBestProcessedItem = (processedItems, token) => {
+    let bestItem = null;
+    let bestScore = -1;
+
+    processedItems.forEach((item, index) => {
+      const itemName = normalizeText(item?.name || item?.itemName || item?.item || "");
+      if (!itemName) return;
+
+      const score = getMatchScore(itemName, token) - index * 0.001;
+      if (score > bestScore) {
+        bestScore = score;
+        bestItem = item;
+      }
+    });
+
+    return bestScore > 0 ? bestItem : null;
+  };
+
+  const getMatchScore = (itemName, token) => {
+    const itemKey = normalizeProductKey(itemName);
+    const tokenKey = normalizeProductKey(token);
+
+    if (!itemKey || !tokenKey) return 0;
+    if (itemKey === tokenKey) return 1000 + itemKey.length;
+    if (itemKey.includes(tokenKey)) return 700 + tokenKey.length;
+    if (tokenKey.includes(itemKey)) return 500 + itemKey.length;
+
+    const itemWords = new Set(itemKey.match(/[a-z]+|\d+/g) || []);
+    const tokenWords = new Set(tokenKey.match(/[a-z]+|\d+/g) || []);
+    let commonWords = 0;
+    tokenWords.forEach((word) => {
+      if (itemWords.has(word)) commonWords += 1;
+    });
+
+    return commonWords;
+  };
+
+  const getInputItemTokens = (value) => {
+    return String(value || "")
+      .split(/[\n\r,;]+/)
+      .map((part) => normalizeText(part.replace(/\s+\d+(\.\d+)?\s*(kg|g|gm|ltr|l|ml|pcs)?\s*$/i, "")))
+      .filter((part) => part.length > 0);
+  };
+
+  const normalizeText = (value) => {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0900-\u097F]+/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const normalizeProductKey = (value) => {
+    return normalizeText(value)
+      .replace(/\b(wali|wala|wale|waali|waala|waale)\b/g, "")
+      .replace(/\s+/g, "");
   };
 
   const handleGalleryScan = async () => {
@@ -154,6 +237,26 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
     return 'Good Evening';
   };
 
+  const scrollToSuggestions = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: scrollYRef.current + 110,
+        animated: true,
+      });
+    }, 80);
+  };
+
+  const scrollToTableRow = (index = 0) => {
+    if (Platform.OS === "ios") return;
+
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: scrollYRef.current + 150 + index * 46,
+        animated: true,
+      });
+    }, 180);
+  };
+
   if (!user) {
     return (
       <View style={styles.fallbackContainer}>
@@ -163,7 +266,12 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      enabled={Platform.OS === "ios"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+    >
       <StatusBar barStyle="light-content" backgroundColor={COLORS.PRIMARY} />
 
       {/* Header */}
@@ -182,14 +290,23 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.content}
+        onScroll={(event) => {
+          scrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         contentContainerStyle={styles.scrollContent}
       >
         <TextInputCard
           input={input}
           setInput={setInput}
           onProcess={handleText}
+          userId={user?.id}
+          isProcessing={isProcessingText}
         />
 
         <EditableTable
@@ -197,6 +314,8 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
           userId={user?.id}
           storeName={user?.name}
           onUpdateUser={updateUserHandler}
+          onSuggestionsVisible={scrollToSuggestions}
+          onRowInputFocus={scrollToTableRow}
         />
       </ScrollView>
 
@@ -222,7 +341,7 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
         showOnlyConfirm={true}
         onConfirm={() => setImageError({ visible: false, message: "" })}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

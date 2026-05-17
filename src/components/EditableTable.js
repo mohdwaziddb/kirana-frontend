@@ -1,13 +1,14 @@
-import { View, Text, TextInput, TouchableOpacity, Alert, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, Platform, ScrollView } from "react-native";
 import { useState, useEffect, useRef } from "react";
 import { Share } from "react-native";
 import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
 import { saveTableHistory } from '../services/historyApi';
+import { getSellerProducts } from '../services/productApi';
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 import CommonModal from "./CommonModal";
 
-export default function EditableTable({ data, userId, storeName }) {
+export default function EditableTable({ data, userId, storeName, onSuggestionsVisible, onRowInputFocus }) {
 
   const [items, setItems] = useState([{ name: "", quantity: "", price: "", total: 0, matched: false }]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -15,7 +16,10 @@ export default function EditableTable({ data, userId, storeName }) {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [modalConfig, setModalConfig] = useState({ title: '', message: '', type: 'info' });
   const [customerName, setCustomerName] = useState('');
+  const [suggestionsByRow, setSuggestionsByRow] = useState({});
+  const [activeSuggestionRow, setActiveSuggestionRow] = useState(null);
   const tableRef = useRef(null);
+  const suggestionRequestRef = useRef(0);
 
   const closeAllModals = () => {
     setShowSuccessModal(false);
@@ -149,18 +153,36 @@ export default function EditableTable({ data, userId, storeName }) {
   };
 
   useEffect(() => {
-    if (Array.isArray(data) && data.length > 0) {
-      // Normalize items - ensure all required fields have defaults
-      const normalizedItems = data.map(item => ({
-        name: item.name || '',
-        quantity: item.quantity == null ? '' : String(item.quantity),
-        price: item.price == null ? '' : String(item.price),
-        total: item.total || (parseFloat(item.quantity || 0) * parseFloat(item.price || 0)),
-        matched: item.matched || false,
-      }));
-      setItems(normalizedItems);
-    }
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    const normalizedItems = normalizeTableItems(data);
+    setItems((currentItems) => (
+      areTableItemsEqual(currentItems, normalizedItems) ? currentItems : normalizedItems
+    ));
   }, [data]);
+
+  const normalizeTableItems = (value) => {
+    return value.map(item => ({
+      name: item.name || '',
+      quantity: item.quantity == null ? '' : String(item.quantity),
+      price: item.price == null ? '' : String(item.price),
+      total: item.total || (parseFloat(item.quantity || 0) * parseFloat(item.price || 0)),
+      matched: item.matched || false,
+    }));
+  };
+
+  const areTableItemsEqual = (currentItems, nextItems) => {
+    if (currentItems.length !== nextItems.length) return false;
+
+    return nextItems.every((nextItem, index) => {
+      const currentItem = currentItems[index] || {};
+      return String(currentItem.name || '') === String(nextItem.name || '')
+        && String(currentItem.quantity || '') === String(nextItem.quantity || '')
+        && String(currentItem.price || '') === String(nextItem.price || '')
+        && Number(currentItem.total || 0) === Number(nextItem.total || 0)
+        && Boolean(currentItem.matched) === Boolean(nextItem.matched);
+    });
+  };
 
   // Update logic
   const updateItem = (index, field, value) => {
@@ -176,9 +198,81 @@ export default function EditableTable({ data, userId, storeName }) {
     setItems(updated);
   };
 
+  const handleNameChange = async (index, value) => {
+    updateItem(index, "name", value);
+    setActiveSuggestionRow(index);
+
+    const keyword = value.trim();
+    if (!userId || keyword.length < 1) {
+      setSuggestionsByRow((current) => ({ ...current, [index]: [] }));
+      return;
+    }
+
+    const requestId = suggestionRequestRef.current + 1;
+    suggestionRequestRef.current = requestId;
+
+    try {
+      const products = await getSellerProducts(userId, { status: "live", query: keyword });
+      if (requestId !== suggestionRequestRef.current) return;
+
+      const normalizedKeyword = normalizeText(keyword);
+      const matchingProducts = Array.isArray(products)
+        ? products.filter((product) => {
+            const english = normalizeText(product.nameEnglish);
+            const hindi = normalizeText(product.nameHindi);
+            return english.includes(normalizedKeyword) || hindi.includes(normalizedKeyword);
+          })
+        : [];
+
+      const hadSuggestions = (suggestionsByRow[index] || []).length > 0;
+
+      setSuggestionsByRow((current) => ({
+        ...current,
+        [index]: matchingProducts,
+      }));
+
+      if (!hadSuggestions && matchingProducts.length > 0) {
+        onSuggestionsVisible?.();
+      }
+    } catch (error) {
+      console.log("Product suggestion error:", error?.message || error);
+      setSuggestionsByRow((current) => ({ ...current, [index]: [] }));
+    }
+  };
+
+  const applySuggestion = (index, product) => {
+    const updated = [...items];
+    const quantity = updated[index]?.quantity || "";
+    const price = product.pricePerUnit == null ? "" : String(product.pricePerUnit);
+    const qtyNumber = parseFloat(quantity) || 0;
+    const priceNumber = parseFloat(price) || 0;
+
+    updated[index] = {
+      ...updated[index],
+      name: product.nameEnglish || product.nameHindi || "",
+      price,
+      quantity,
+      total: qtyNumber * priceNumber,
+      matched: true,
+    };
+
+    setItems(updated);
+    setSuggestionsByRow((current) => ({ ...current, [index]: [] }));
+    setActiveSuggestionRow(null);
+  };
+
+  const clearSuggestions = () => {
+    setActiveSuggestionRow(null);
+    setSuggestionsByRow({});
+  };
+
   const getInputValue = (value) => {
     if (value == null) return '';
     return String(value);
+  };
+
+  const normalizeText = (value) => {
+    return String(value || '').trim().toLowerCase();
   };
 
   const clearDefaultNumberOnFocus = (index, field) => {
@@ -196,9 +290,31 @@ export default function EditableTable({ data, userId, storeName }) {
     ]);
   };
 
+  const clearAllRows = () => {
+    clearSuggestions();
+    setItems([{ name: "", quantity: "", price: "", total: 0, matched: false }]);
+  };
+
   // ❌ Delete row
   const deleteRow = (index) => {
     const newItems = items.filter((_, i) => i !== index);
+    setSuggestionsByRow((current) => {
+      const next = {};
+      Object.keys(current).forEach((key) => {
+        const rowIndex = Number(key);
+        if (rowIndex < index) {
+          next[rowIndex] = current[key];
+        } else if (rowIndex > index) {
+          next[rowIndex - 1] = current[key];
+        }
+      });
+      return next;
+    });
+    setActiveSuggestionRow((current) => {
+      if (current === index) return null;
+      if (current > index) return current - 1;
+      return current;
+    });
     
     // If no items left after deletion, add a default row
     if (newItems.length === 0) {
@@ -550,7 +666,8 @@ export default function EditableTable({ data, userId, storeName }) {
       {/* ROWS */}
       <View style={styles.tableBody}>
         {items.map((item, index) => (
-          <View key={index} style={{
+          <View key={index}>
+          <View style={{
                 flexDirection: 'row',
     paddingVertical: SIZES.PADDING_XS,
     borderBottomWidth: 1,
@@ -568,7 +685,15 @@ export default function EditableTable({ data, userId, storeName }) {
               value={item.name}
               placeholder="Item name"
               placeholderTextColor={COLORS.TEXT_SECONDARY}
-              onChangeText={(val) => updateItem(index, "name", val)}
+              onFocus={() => {
+                setActiveSuggestionRow(index);
+                onRowInputFocus?.(index);
+              }}
+              onBlur={() => {
+                setTimeout(clearSuggestions, 150);
+              }}
+              onPressIn={(event) => event.stopPropagation()}
+              onChangeText={(val) => handleNameChange(index, val)}
             />
              {/* </View> */}
 
@@ -583,7 +708,11 @@ export default function EditableTable({ data, userId, storeName }) {
               textAlign="center"
               textAlignVertical="center"
               selectionColor={COLORS.PRIMARY}
-              onFocus={() => clearDefaultNumberOnFocus(index, "quantity")}
+              onFocus={() => {
+                onRowInputFocus?.(index);
+                clearDefaultNumberOnFocus(index, "quantity");
+              }}
+              onPressIn={() => onRowInputFocus?.(index)}
               onChangeText={(val) => updateItem(index, "quantity", val)}
             />
             </View>
@@ -602,7 +731,11 @@ export default function EditableTable({ data, userId, storeName }) {
               textAlign="center"
               textAlignVertical="center"
               selectionColor={COLORS.PRIMARY}
-              onFocus={() => clearDefaultNumberOnFocus(index, "price")}
+              onFocus={() => {
+                onRowInputFocus?.(index);
+                clearDefaultNumberOnFocus(index, "price");
+              }}
+              onPressIn={() => onRowInputFocus?.(index)}
               onChangeText={(val) => updateItem(index, "price", val)}
             />
 
@@ -631,17 +764,62 @@ export default function EditableTable({ data, userId, storeName }) {
             </TouchableOpacity>
             </View>
           </View>
+          {activeSuggestionRow === index && suggestionsByRow[index]?.length > 0 ? (
+            <View style={styles.suggestionBox}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
+                {suggestionsByRow[index].map((product) => (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={styles.suggestionItem}
+                    onPress={() => applySuggestion(index, product)}
+                    onPressIn={(event) => event.stopPropagation()}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.suggestionTextBox}>
+                      <Text style={styles.suggestionName} numberOfLines={1}>
+                        {product.nameEnglish || product.nameHindi}
+                      </Text>
+                      <Text style={styles.suggestionMeta} numberOfLines={1}>
+                        {product.nameHindi || product.nameEnglish}
+                      </Text>
+                    </View>
+                    <Text style={styles.suggestionPrice}>
+                      Rs {product.pricePerUnit || 0}/{product.unit || "-"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+          </View>
         ))}
       </View>
 
       {/* ➕ ADD BUTTON */}
-      <TouchableOpacity
-        onPress={addRow}
-        style={styles.addButton}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.addButtonText}>➕ Add Row</Text>
-      </TouchableOpacity>
+      <View style={styles.rowActionBar}>
+        <TouchableOpacity
+          onPress={() => {
+            clearSuggestions();
+            addRow();
+          }}
+          style={styles.addButton}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.addButtonText}>➕ Add Row</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={clearAllRows}
+          style={styles.clearAllButton}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.clearAllButtonText}>Clear All</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* 💰 GRAND TOTAL */}
       <View style={styles.totalContainer}>
@@ -652,7 +830,10 @@ export default function EditableTable({ data, userId, storeName }) {
       {/* BUTTONS */}
       <View style={styles.buttonRow}>
         <TouchableOpacity
-          onPress={handleSavePress}
+          onPress={() => {
+            clearSuggestions();
+            handleSavePress();
+          }}
           style={[styles.actionButton, styles.saveButton]}
           activeOpacity={0.8}
         >
@@ -660,7 +841,10 @@ export default function EditableTable({ data, userId, storeName }) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={handleSharePress}
+          onPress={() => {
+            clearSuggestions();
+            handleSharePress();
+          }}
           style={[styles.actionButton, styles.shareButton]}
           activeOpacity={0.8}
         >
@@ -812,6 +996,47 @@ const styles = {
     textAlign: 'left',
     paddingLeft: SIZES.PADDING_SM,
   },
+  suggestionBox: {
+    marginLeft: 4,
+    marginRight: 4,
+    marginBottom: SIZES.MARGIN_XS,
+    maxHeight: 132,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+    borderRadius: SIZES.RADIUS_BASE,
+    backgroundColor: COLORS.WHITE,
+    overflow: 'hidden',
+    ...SHADOWS.SMALL,
+  },
+  suggestionItem: {
+    minHeight: 42,
+    paddingHorizontal: SIZES.PADDING_SM,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.GRAY_100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SIZES.MARGIN_SM,
+  },
+  suggestionTextBox: {
+    flex: 1,
+  },
+  suggestionName: {
+    fontSize: SIZES.FONT_SM,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  suggestionMeta: {
+    fontSize: SIZES.FONT_XS || 11,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: 2,
+  },
+  suggestionPrice: {
+    fontSize: SIZES.FONT_XS || 11,
+    fontWeight: FONTS.BOLD,
+    color: COLORS.PRIMARY,
+  },
   totalText: {
     fontSize: SIZES.FONT_SM,
     fontWeight: FONTS.BOLD,
@@ -837,18 +1062,39 @@ const styles = {
     marginBottom:2,
 
   },
+  rowActionBar: {
+    flexDirection: 'row',
+    gap: SIZES.MARGIN_SM,
+    marginBottom: SIZES.MARGIN_SM,
+  },
   addButton: {
+    flex: 1,
     backgroundColor: '#F59E0B',
-    height: 48,
+    height: 44,
     borderRadius: SIZES.RADIUS_LG,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SIZES.MARGIN_SM,
     ...SHADOWS.SMALL,
   },
   addButtonText: {
     color: COLORS.WHITE,
     fontSize: SIZES.FONT_BASE,
+    fontWeight: FONTS.BOLD,
+  },
+  clearAllButton: {
+    backgroundColor: COLORS.WHITE,
+    height: 44,
+    minWidth: 88,
+    paddingHorizontal: SIZES.PADDING_SM,
+    borderRadius: SIZES.RADIUS_LG,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.ERROR,
+  },
+  clearAllButtonText: {
+    color: COLORS.ERROR,
+    fontSize: SIZES.FONT_SM,
     fontWeight: FONTS.BOLD,
   },
   totalContainer: {

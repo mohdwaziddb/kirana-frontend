@@ -3,14 +3,17 @@
 import { BASE_URL } from "./baseUrl";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const processTextAPI = async (input) => {
+export const processTextAPI = async (input, userId) => {
   try {
     console.log("📤 Sending:", input);
 
     // Get JWT token from AsyncStorage
     const token = await AsyncStorage.getItem("token");
     
-    const res = await fetch(`${BASE_URL}/api/process`, {
+    const params = new URLSearchParams();
+    if (userId) params.append("userId", String(userId));
+
+    const res = await fetch(`${BASE_URL}/api/process${params.toString() ? `?${params.toString()}` : ""}`, {
       method: "POST",
       headers: { 
         "Content-Type": "text/plain",

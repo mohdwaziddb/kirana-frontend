@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView, Keyboard, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ErrorPopup from "../components/ErrorPopup";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 import { BASE_URL } from "../services/baseUrl";
+import { APP_VERSION } from "../services/appVersion";
 
 export default function LoginScreen({ navigation, onLogin }) {
   const [identifier, setIdentifier] = useState("");
@@ -27,12 +28,14 @@ export default function LoginScreen({ navigation, onLogin }) {
 
     setLoading(true);
     try {
+      console.log("App version:", APP_VERSION);
+
       const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ identifier: trimmedIdentifier, password }),
+        body: JSON.stringify({ identifier: trimmedIdentifier, password, appVersion: APP_VERSION }),
       });
 
       const data = await response.json();
@@ -40,7 +43,18 @@ export default function LoginScreen({ navigation, onLogin }) {
       if (response.ok) {
         await AsyncStorage.setItem("token", data.token);
         await AsyncStorage.setItem("user", JSON.stringify(data.user));
+        await AsyncStorage.setItem("appVersion", APP_VERSION);
+        Keyboard.dismiss();
         onLogin(data.user);
+      } else if (data.code === "APP_VERSION_MISMATCH") {
+        console.log("Version mismatch:", {
+          frontendVersion: data.frontendVersion,
+          backendVersion: data.backendVersion,
+        });
+        showError(
+          data.message || "App version update required. Kripya app update karein ya Admin se contact karein. Support: 8130703196",
+          "App Version Issue"
+        );
       } else {
         showError(data.message || "Please check your login details and try again.");
       }
@@ -63,7 +77,7 @@ export default function LoginScreen({ navigation, onLogin }) {
           <View style={styles.circleTop} />
           <View style={styles.circleBottom} />
           <View style={styles.logo}>
-            <Text style={styles.logoText}>KS</Text>
+            <Image source={require("../../assets/icon.png")} style={styles.logoImage} />
           </View>
           <Text style={styles.title}>Kirana Store</Text>
           <Text style={styles.subtitle}>Sign in to manage your item lists</Text>
@@ -197,10 +211,11 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.MARGIN_BASE,
     ...SHADOWS.MEDIUM,
   },
-  logoText: {
-    fontSize: SIZES.FONT_2XL,
-    fontWeight: FONTS.EXTRABOLD,
-    color: COLORS.PRIMARY,
+  logoImage: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    resizeMode: "contain",
   },
   title: {
     fontSize: SIZES.FONT_3XL,

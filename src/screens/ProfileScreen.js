@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { COLORS, SIZES, FONTS } from "../constants/theme";
 import { BASE_URL } from "../services/baseUrl";
+import CommonModal from "../components/CommonModal";
 
 const { width } = Dimensions.get("window");
 
@@ -17,6 +18,7 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
   const [success, setSuccess] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showProfileSuccessModal, setShowProfileSuccessModal] = useState(false);
 
   useEffect(() => {
     if (user && user.name) {
@@ -81,7 +83,7 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
         }
 
         setEditMode(false);
-        Alert.alert("Success", "Profile updated successfully");
+        setShowProfileSuccessModal(true);
       } else {
         Alert.alert("Error", data.message || "Profile update failed");
       }
@@ -423,6 +425,18 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
           </View>
         </View>
       </Modal>
+
+      <CommonModal
+        visible={showProfileSuccessModal}
+        type="success"
+        title="Profile Updated"
+        message="Your profile details have been saved successfully."
+        confirmText="Great"
+        showOnlyConfirm={true}
+        autoCloseTime={1400}
+        onConfirm={() => setShowProfileSuccessModal(false)}
+        image="✓"
+      />
     </View>
   );
 }

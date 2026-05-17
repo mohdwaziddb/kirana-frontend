@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { View, TouchableOpacity, Text, StyleSheet, Alert } from "react-native";
 import { NavigationContainer, CommonActions } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -9,49 +9,26 @@ import RegisterScreen from "../screens/RegisterScreen";
 import HomeScreen from "../screens/HomeScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import HistoryScreen from "../screens/HistoryScreen";
+import ProductScreen from "../screens/ProductScreen";
 import CommonModal from "./CommonModal";
 import { COLORS, FONTS, SIZES, SHADOWS } from "../constants/theme";
+import { getRandomLogoutMessage } from "../constants/messages";
+import { BASE_URL } from "../services/baseUrl";
+import { APP_VERSION } from "../services/appVersion";
 
 const Stack = createNativeStackNavigator();
 
-// 20 funny logout messages (no religious content)
-const logoutMessages = [
-  "Arre mat jao na! 🥺",
-  "Ek aur scan kar lo na! 📸",
-  "Ghunghroo mat tukro! 💃",
-  "Dil todo mat yaar! ❤️",
-  "Chhod ke mat jao na! 🙏",
-  "Room toot jayega! 🏠💔",
-  "Mereko chhod ke jao mat! 😢",
-  "A thoda aur raho! ⏰",
-  "Kaam khatam nahi hua! 📋",
-  "Bill toh bana lo pehle! 🧾",
-  "Scan toh kar lo ek! 🔍",
-  "Bas ek aur baar! 🤗",
-  "Jaan jane mat do! 😰",
-  "Pyaar se mat jao! 💕",
-  "Kabhi toh waapis aana! 🔄",
-  "Zindagi mein kuch kamm ke jao! 💼",
-  "Chalo ek aur item add karo! ➕",
-  "Total toh check karo! 💰",
-  "Shopping toh khatam karo! 🛒",
-  "Phir se login karna padega! 😏",
-];
-
-const getRandomLogoutMessage = () => {
-  return logoutMessages[Math.floor(Math.random() * logoutMessages.length)];
-};
+const isSellerUser = (user) => String(user?.role || "").toUpperCase() === "SELLER";
 
 // Single BottomNav component
-function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount, onLogout }) {
+function BottomNav({ currentScreen, navigationRef, setOpenGalleryOnMount, onLogout, user }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [logoutMessage, setLogoutMessage] = useState("");
   const insets = useSafeAreaInsets();
+  const showProductNav = isSellerUser(user);
 
   const navigateTo = (screen) => {
-    if (navigation && navigation.navigate) {
-      navigation.navigate(screen);
-    }
+    navigationRef.current?.navigate(screen);
   };
 
   const handleLogoutConfirm = async () => {
@@ -109,8 +86,8 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount, onLogout 
           navigateTo('Home');
         }}
       >
-        <View style={[styles.navIconContainer, styles.navIconScan, currentScreen === 'Scan' && styles.navIconContainerActive]}>
-          <Text style={styles.navIconTextActive}>📷</Text>
+        <View style={[styles.navIconContainer, currentScreen === 'Scan' && styles.navIconContainerActive]}>
+          <Text style={styles.navIcon}>📷</Text>
         </View>
         <Text style={[styles.navLabel, currentScreen === 'Scan' && styles.navLabelActive]}>Scan</Text>
       </TouchableOpacity>
@@ -125,6 +102,19 @@ function BottomNav({ currentScreen, navigation, setOpenGalleryOnMount, onLogout 
         </View>
         <Text style={[styles.navLabel, currentScreen === 'History' && styles.navLabelActive]}>History</Text>
       </TouchableOpacity>
+
+      {showProductNav ? (
+        <TouchableOpacity
+          style={[styles.navItem, currentScreen === 'Product' && styles.navItemActive]}
+          activeOpacity={0.7}
+          onPress={() => navigateTo('Product')}
+        >
+          <View style={[styles.navIconContainer, currentScreen === 'Product' && styles.navIconContainerActive]}>
+            <Text style={styles.navIcon}>{"\u{1F4E6}"}</Text>
+          </View>
+          <Text style={[styles.navLabel, currentScreen === 'Product' && styles.navLabelActive]}>Product</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <TouchableOpacity
         style={styles.navItem}
@@ -159,6 +149,7 @@ export default function AuthNavigator() {
   const [loading, setLoading] = useState(true);
   const [currentScreen, setCurrentScreen] = useState('Home');
   const [openGalleryOnMount, setOpenGalleryOnMount] = useState(false);
+  const [versionIssueModal, setVersionIssueModal] = useState(false);
   const navigationRef = useRef(null);
   const isMounted = useRef(false);
 
@@ -183,9 +174,18 @@ export default function AuthNavigator() {
     try {
       const token = await AsyncStorage.getItem("token");
       const userStr = await AsyncStorage.getItem("user");
+      const storedAppVersion = await AsyncStorage.getItem("appVersion");
+      if (token && userStr && storedAppVersion !== APP_VERSION) {
+        await AsyncStorage.multiRemove(["token", "user", "tokenExpiry", "appVersion"]);
+        setUser(null);
+        setVersionIssueModal(true);
+        return;
+      }
+
       if (token && userStr) {
         const userData = JSON.parse(userStr);
-        setUser(userData);
+        const freshUser = await refreshUserProfile(token, userData);
+        setUser(freshUser);
       }
     } catch (error) {
       console.error("Session check error:", error);
@@ -194,13 +194,61 @@ export default function AuthNavigator() {
     }
   };
 
+  const refreshUserProfile = async (token, storedUser) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/auth/profile`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-App-Version": APP_VERSION,
+        },
+      });
+
+      if (!response.ok) {
+        let errorData = {};
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = {};
+        }
+
+        if (errorData.code === "APP_VERSION_MISMATCH") {
+          const error = new Error(errorData.message || "App version mismatch");
+          error.code = "APP_VERSION_MISMATCH";
+          throw error;
+        }
+
+        return storedUser;
+      }
+
+      const data = await response.json();
+      const serverUser = data.user || data;
+      const mergedUser = { ...storedUser, ...serverUser };
+      await AsyncStorage.setItem("user", JSON.stringify(mergedUser));
+      return mergedUser;
+    } catch (error) {
+      console.error("Profile refresh error:", error);
+      if (error?.code === "APP_VERSION_MISMATCH") {
+        await AsyncStorage.multiRemove(["token", "user", "tokenExpiry", "appVersion"]);
+        setVersionIssueModal(true);
+        return null;
+      }
+      return storedUser;
+    }
+  };
+
   const handleLogin = (userData) => {
     setUser(userData);
   };
 
+  const handleGalleryOpened = useCallback(() => {
+    setOpenGalleryOnMount(false);
+  }, []);
+
   const handleLogout = async () => {
     try {
-      await AsyncStorage.multiRemove(["token", "user", "tokenExpiry"]);
+      await AsyncStorage.multiRemove(["token", "user", "tokenExpiry", "appVersion"]);
     } catch (error) {
       console.error("Error clearing storage:", error);
     }
@@ -209,20 +257,30 @@ export default function AuthNavigator() {
     setUser(null);
   };
 
-  // Track current route and store navigation
-  const [navRef, setNavRef] = useState(null);
+  const showProductScreen = isSellerUser(user);
 
   const onStateChange = (state) => {
     if (state && state.routes && state.routes.length > 0) {
       const current = state.routes[state.index].name;
-      if (['Home', 'Profile', 'History'].includes(current)) {
-        setCurrentScreen(current);
+      if (current === 'Product' && !showProductScreen) {
+        setCurrentScreen((previous) => previous === 'Home' ? previous : 'Home');
+        navigationRef.current?.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          })
+        );
+        return;
+      }
+
+      const allowedScreens = showProductScreen
+        ? ['Home', 'Profile', 'History', 'Product']
+        : ['Home', 'Profile', 'History'];
+
+      if (allowedScreens.includes(current)) {
+        setCurrentScreen((previous) => previous === current ? previous : current);
       }
     }
-  };
-
-  const handleNavigationRef = (ref) => {
-    setNavRef(ref);
   };
 
   if (loading) {
@@ -232,23 +290,34 @@ export default function AuthNavigator() {
   // When user is not logged in, show simple auth screens
   if (!user) {
     return (
-      <NavigationContainer ref={navigationRef}>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Login">
-            {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
-          </Stack.Screen>
-          <Stack.Screen name="Register">
-            {(props) => <RegisterScreen {...props} onLogin={handleLogin} />}
-          </Stack.Screen>
-        </Stack.Navigator>
-      </NavigationContainer>
+      <>
+        <NavigationContainer ref={navigationRef}>
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Login">
+              {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
+            </Stack.Screen>
+            <Stack.Screen name="Register">
+              {(props) => <RegisterScreen {...props} onLogin={handleLogin} />}
+            </Stack.Screen>
+          </Stack.Navigator>
+        </NavigationContainer>
+        <CommonModal
+          visible={versionIssueModal}
+          type="error"
+          title="App Update Required"
+          message="App version update required. Kripya app update karein ya Admin se contact karein. Support: 8130703196"
+          confirmText="OK"
+          showOnlyConfirm={true}
+          onConfirm={() => setVersionIssueModal(false)}
+        />
+      </>
     );
   }
 
   // When user is logged in, show main screens with bottom nav
   return (
     <View style={{ flex: 1 }}>
-      <NavigationContainer ref={(ref) => { navigationRef.current = ref; handleNavigationRef(ref); }} onStateChange={onStateChange}>
+      <NavigationContainer ref={navigationRef} onStateChange={onStateChange}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Home">
             {(props) => (
@@ -258,7 +327,7 @@ export default function AuthNavigator() {
                 onLogout={handleLogout}
                 onUpdateUser={setUser}
                 openGalleryOnMount={openGalleryOnMount}
-                onGalleryOpened={() => setOpenGalleryOnMount(false)}
+                onGalleryOpened={handleGalleryOpened}
               />
             )}
           </Stack.Screen>
@@ -277,13 +346,21 @@ export default function AuthNavigator() {
               <HistoryScreen {...props} user={user} />
             )}
           </Stack.Screen>
+          {showProductScreen ? (
+            <Stack.Screen name="Product">
+              {(props) => (
+                <ProductScreen {...props} user={user} />
+              )}
+            </Stack.Screen>
+          ) : null}
         </Stack.Navigator>
       </NavigationContainer>
       <BottomNav
         currentScreen={currentScreen}
-        navigation={navRef}
+        navigationRef={navigationRef}
         setOpenGalleryOnMount={setOpenGalleryOnMount}
         onLogout={handleLogout}
+        user={user}
       />
     </View>
   );
@@ -326,23 +403,26 @@ const styles = StyleSheet.create({
   navIconContainerActive: {
     backgroundColor: COLORS.PRIMARY,
   },
-  navIconScan: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginTop: -8,
-  },
   navIcon: {
-    fontSize: 18,
+    fontSize: 19,
+    lineHeight: 22,
+    textAlign: 'center',
   },
-  navIconTextActive: {
-    fontSize: 22,
+  navLetter: {
+    fontSize: 19,
+    lineHeight: 22,
+    textAlign: 'center',
+    fontWeight: FONTS.BOLD,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  navLetterActive: {
+    color: COLORS.WHITE,
   },
   navLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.TEXT_SECONDARY,
     fontWeight: FONTS.MEDIUM,
-    lineHeight: 14,
+    lineHeight: 13,
   },
   navLabelActive: {
     color: COLORS.PRIMARY,
