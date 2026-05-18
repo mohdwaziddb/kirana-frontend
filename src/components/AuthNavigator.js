@@ -21,7 +21,7 @@ const Stack = createNativeStackNavigator();
 const isSellerUser = (user) => String(user?.role || "").toUpperCase() === "SELLER";
 
 // Single BottomNav component
-function BottomNav({ currentScreen, navigationRef, setOpenGalleryOnMount, onLogout, user }) {
+function BottomNav({ currentScreen, navigationRef, requestScan, onLogout, user }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [logoutMessage, setLogoutMessage] = useState("");
   const insets = useSafeAreaInsets();
@@ -33,7 +33,6 @@ function BottomNav({ currentScreen, navigationRef, setOpenGalleryOnMount, onLogo
 
   const handleLogoutConfirm = async () => {
     setShowLogoutModal(false);
-    setOpenGalleryOnMount(false);
     try {
       if (onLogout) {
         await onLogout();
@@ -82,7 +81,7 @@ function BottomNav({ currentScreen, navigationRef, setOpenGalleryOnMount, onLogo
         style={[styles.navItem, currentScreen === 'Scan' && styles.navItemActive]}
         activeOpacity={0.7}
         onPress={() => {
-          setOpenGalleryOnMount(true);
+          requestScan();
           navigateTo('Home');
         }}
       >
@@ -148,7 +147,7 @@ export default function AuthNavigator() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentScreen, setCurrentScreen] = useState('Home');
-  const [openGalleryOnMount, setOpenGalleryOnMount] = useState(false);
+  const [scanRequestId, setScanRequestId] = useState(0);
   const [versionIssueModal, setVersionIssueModal] = useState(false);
   const navigationRef = useRef(null);
   const isMounted = useRef(false);
@@ -175,7 +174,9 @@ export default function AuthNavigator() {
       const token = await AsyncStorage.getItem("token");
       const userStr = await AsyncStorage.getItem("user");
       const storedAppVersion = await AsyncStorage.getItem("appVersion");
-      if (token && userStr && storedAppVersion !== APP_VERSION) {
+      if (token && userStr && !storedAppVersion) {
+        await AsyncStorage.setItem("appVersion", APP_VERSION);
+      } else if (token && userStr && storedAppVersion !== APP_VERSION) {
         await AsyncStorage.multiRemove(["token", "user", "tokenExpiry", "appVersion"]);
         setUser(null);
         setVersionIssueModal(true);
@@ -242,8 +243,12 @@ export default function AuthNavigator() {
     setUser(userData);
   };
 
-  const handleGalleryOpened = useCallback(() => {
-    setOpenGalleryOnMount(false);
+  const requestScan = useCallback(() => {
+    setScanRequestId((current) => current + 1);
+  }, []);
+
+  const clearScanRequest = useCallback(() => {
+    setScanRequestId(0);
   }, []);
 
   const handleLogout = async () => {
@@ -253,7 +258,7 @@ export default function AuthNavigator() {
       console.error("Error clearing storage:", error);
     }
     setCurrentScreen('Home');
-    setOpenGalleryOnMount(false);
+    setScanRequestId(0);
     setUser(null);
   };
 
@@ -326,8 +331,8 @@ export default function AuthNavigator() {
                 user={user}
                 onLogout={handleLogout}
                 onUpdateUser={setUser}
-                openGalleryOnMount={openGalleryOnMount}
-                onGalleryOpened={handleGalleryOpened}
+                scanRequestId={scanRequestId}
+                onScanRequestHandled={clearScanRequest}
               />
             )}
           </Stack.Screen>
@@ -358,7 +363,7 @@ export default function AuthNavigator() {
       <BottomNav
         currentScreen={currentScreen}
         navigationRef={navigationRef}
-        setOpenGalleryOnMount={setOpenGalleryOnMount}
+        requestScan={requestScan}
         onLogout={handleLogout}
         user={user}
       />

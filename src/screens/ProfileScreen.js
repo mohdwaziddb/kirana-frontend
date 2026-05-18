@@ -19,6 +19,7 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
   const [editMode, setEditMode] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showProfileSuccessModal, setShowProfileSuccessModal] = useState(false);
+  const [showPasswordSuccessModal, setShowPasswordSuccessModal] = useState(false);
 
   useEffect(() => {
     if (user && user.name) {
@@ -113,6 +114,11 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
       return;
     }
 
+    if (currentPassword === newPassword) {
+      setError("New password must be different from current password");
+      return;
+    }
+
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem("token");
@@ -136,8 +142,7 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
         setNewPassword("");
         setConfirmPassword("");
         setShowPasswordModal(false);
-        Alert.alert("Success", "Password changed successfully. Please login with your new password.");
-        if (onLogout) onLogout();
+        setShowPasswordSuccessModal(true);
       } else {
         setError(data.message || "Current password is incorrect");
       }
@@ -177,6 +182,13 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
         },
       ]
     );
+  };
+
+  const handlePasswordSuccessClose = async () => {
+    setShowPasswordSuccessModal(false);
+    if (onLogout) {
+      await onLogout();
+    }
   };
 
   return (
@@ -436,6 +448,18 @@ export default function ProfileScreen({ user, onLogout, onUpdateUser }) {
         autoCloseTime={1400}
         onConfirm={() => setShowProfileSuccessModal(false)}
         image="✓"
+      />
+
+      <CommonModal
+        visible={showPasswordSuccessModal}
+        type="success"
+        title="Password Changed"
+        message="Password changed successfully. Please login with your new password."
+        confirmText="Login"
+        showOnlyConfirm={true}
+        autoCloseTime={1800}
+        onConfirm={handlePasswordSuccessClose}
+        image="âœ“"
       />
     </View>
   );

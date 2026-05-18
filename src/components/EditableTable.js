@@ -8,7 +8,7 @@ import { getSellerProducts } from '../services/productApi';
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 import CommonModal from "./CommonModal";
 
-export default function EditableTable({ data, userId, storeName, onSuggestionsVisible, onRowInputFocus }) {
+export default function EditableTable({ data, userId, storeName, onItemsChange, onSuggestionsVisible, onRowInputFocus }) {
 
   const [items, setItems] = useState([{ name: "", quantity: "", price: "", total: 0, matched: false }]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -160,6 +160,10 @@ export default function EditableTable({ data, userId, storeName, onSuggestionsVi
       areTableItemsEqual(currentItems, normalizedItems) ? currentItems : normalizedItems
     ));
   }, [data]);
+
+  useEffect(() => {
+    onItemsChange?.(items);
+  }, [items, onItemsChange]);
 
   const normalizeTableItems = (value) => {
     return value.map(item => ({
@@ -656,11 +660,11 @@ export default function EditableTable({ data, userId, storeName, onSuggestionsVi
 
       {/* TABLE HEADER */}
       <View style={styles.tableHeader}>
-        <Text style={[styles.tableHeaderText, styles.tableHeaderLeft, { flex: 2 }]}>Item</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>Qty</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>Price</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>Total</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>Action</Text>
+        <Text style={[styles.tableHeaderText, styles.tableHeaderLeft, styles.itemColumn]}>Item</Text>
+        <Text style={[styles.tableHeaderText, styles.qtyColumn]}>Qty</Text>
+        <Text style={[styles.tableHeaderText, styles.priceColumn]}>Price</Text>
+        <Text style={[styles.tableHeaderText, styles.totalColumn]}>Total</Text>
+        <Text style={[styles.tableHeaderText, styles.actionColumn]}>Action</Text>
       </View>
 
       {/* ROWS */}
@@ -680,7 +684,7 @@ export default function EditableTable({ data, userId, storeName, onSuggestionsVi
             {/* <View style={{}}> */}
             <TextInput
               style={[styles.tableInput, styles.tableInputLeft, {
-                width:120
+                width:112
               }]}
               value={item.name}
               placeholder="Item name"
@@ -720,7 +724,7 @@ export default function EditableTable({ data, userId, storeName, onSuggestionsVi
            
 
             {/* PRICE */}
-            <View style={{flexDirection:"row",justifyContent:"space-between",alignItems:'center',width:150,marginStart:2}}>
+            <View style={{flexDirection:"row",justifyContent:"space-between",alignItems:'center',width:138,marginStart:2}}>
               <View style={{flexDirection:'row',alignItems:'center'}}>
             <TextInput
               style={[styles.tableInput, styles.tableInputCenter, styles.numberInput]}
@@ -749,9 +753,9 @@ export default function EditableTable({ data, userId, storeName, onSuggestionsVi
             <TouchableOpacity
               style={[{
                     backgroundColor: COLORS.ERROR,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
               }]}
@@ -947,6 +951,21 @@ const styles = {
     textAlign: 'left',
     paddingLeft: SIZES.PADDING_SM,
   },
+  itemColumn: {
+    flex: 2.2,
+  },
+  qtyColumn: {
+    flex: 1,
+  },
+  priceColumn: {
+    flex: 1,
+  },
+  totalColumn: {
+    flex: 1,
+  },
+  actionColumn: {
+    flex: 0.9,
+  },
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: COLORS.PRIMARY + '12',
@@ -987,7 +1006,7 @@ const styles = {
     alignItems: 'center',
   },
   numberInput: {
-    minWidth: 54,
+    minWidth: 48,
     height: 38,
     paddingLeft: 2,
     paddingRight: 2,

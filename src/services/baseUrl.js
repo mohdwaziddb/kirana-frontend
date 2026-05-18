@@ -30,7 +30,7 @@ const LOCAL_DEVICE_FALLBACK_URL = `http://192.168.1.12:${BACKEND_PORT}`;
 // LIVE AWS SERVER URL
 // ==========================================
 
-const LIVE_URL = "http://13.235.61.146:8081";
+const LIVE_URL = "http://13.232.82.236:8081";
 
 // ==========================================
 // EXPORT BASE URL

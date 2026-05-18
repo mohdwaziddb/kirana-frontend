@@ -1,5 +1,6 @@
-import React, { useRef, useState, useEffect } from "react";
-import { Keyboard, KeyboardAvoidingView, ScrollView, Text, View, StyleSheet, StatusBar, TouchableOpacity, Platform } from "react-native";
+import React, { useCallback, useRef, useState, useEffect } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, ScrollView, Text, View, StyleSheet, StatusBar, TouchableOpacity, Platform } from "react-native";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { processTextAPI } from "../services/textApi";
 import { uploadImageAPI } from "../services/imageApi";
@@ -8,10 +9,11 @@ import EditableTable from "../components/EditableTable";
 import CommonModal from "../components/CommonModal";
 import { COLORS } from "../constants/theme";
 
-export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, navigation, openGalleryOnMount, onGalleryOpened }) {
+export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, navigation, scanRequestId = 0, onScanRequestHandled }) {
 
   const scrollRef = useRef(null);
   const scrollYRef = useRef(0);
+  const scanInProgressRef = useRef(false);
   const [user, setUser] = useState(initialUser);
   const [input, setInput] = useState("");
   const [items, setItems] = useState([]);
@@ -20,6 +22,7 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [imageError, setImageError] = useState({ visible: false, message: "" });
   const [isProcessingText, setIsProcessingText] = useState(false);
+  const [isScanningImage, setIsScanningImage] = useState(false);
 
   const areUsersEqual = (currentUser, nextUser) => {
     if (!currentUser && !nextUser) return true;
@@ -47,16 +50,6 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
       document.activeElement?.blur?.();
     }
   }, []);
-
-  useEffect(() => {
-    if (openGalleryOnMount && onGalleryOpened) {
-      const timer = setTimeout(() => {
-        handleGalleryScan();
-        onGalleryOpened();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [openGalleryOnMount]);
 
   const updateUserHandler = onUpdateUser || mergeUserData;
 
@@ -92,11 +85,26 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
     return normalizedItems;
   };
 
-  const replaceTableItems = (nextItems) => {
+  const syncTableItems = useCallback((nextItems) => {
     const normalizedItems = normalizeItems(nextItems);
-    setItems(normalizedItems);
+    setItems((currentItems) => (
+      areItemListsEqual(normalizeItems(currentItems), normalizedItems) ? currentItems : normalizedItems
+    ));
     setShowResult(normalizedItems.length > 0);
     return normalizedItems;
+  }, []);
+
+  const areItemListsEqual = (currentItems, nextItems) => {
+    if (currentItems.length !== nextItems.length) return false;
+
+    return nextItems.every((nextItem, index) => {
+      const currentItem = currentItems[index] || {};
+      return String(currentItem.name || "") === String(nextItem.name || "")
+        && String(currentItem.quantity || "") === String(nextItem.quantity || "")
+        && String(currentItem.price || "") === String(nextItem.price || "")
+        && Number(currentItem.total || 0) === Number(nextItem.total || 0)
+        && Boolean(currentItem.matched) === Boolean(nextItem.matched);
+    });
   };
 
   const handleText = async () => {
@@ -105,7 +113,8 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
     try {
       setIsProcessingText(true);
       const data = await processTextAPI(input, user?.id);
-      replaceTableItems(filterProcessedItems(data, input));
+      appendItemsToTable(filterProcessedItems(data, input));
+      setInput("");
     } finally {
       setIsProcessingText(false);
     }
@@ -181,14 +190,65 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
       .replace(/\s+/g, "");
   };
 
-  const handleGalleryScan = async () => {
+  const prepareImageForUpload = async (asset) => {
+    if (Platform.OS === "web") return asset;
+
+    const uri = asset?.uri;
+    if (!uri) return asset;
+
+    const manipulated = await ImageManipulator.manipulateAsync(
+      uri,
+      [],
+      {
+        compress: 0.75,
+        format: ImageManipulator.SaveFormat.JPEG,
+      }
+    );
+
+    return {
+      ...asset,
+      uri: manipulated.uri,
+      fileName: "scan.jpg",
+      name: "scan.jpg",
+      mimeType: "image/jpeg",
+      type: "image/jpeg",
+    };
+  };
+
+  const ensureImagePickerAccess = async () => {
+    if (Platform.OS === "web" || Platform.OS === "android") return true;
+
+    const currentPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (currentPermission.granted) return true;
+
+    if (currentPermission.canAskAgain === false) {
+      setImageError({
+        visible: true,
+        message: "Photo access is blocked. Please enable photo permission from app settings and try again.",
+      });
+      return false;
+    }
+
+    const requestedPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!requestedPermission.granted) {
+      setImageError({
+        visible: true,
+        message: "Photo access is required to scan an image. Please allow photo access and try again.",
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleGalleryScan = useCallback(async () => {
+    if (scanInProgressRef.current) return;
+    scanInProgressRef.current = true;
+
     try {
-      if (Platform.OS !== 'web') {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) {
-          setImageError({ visible: true, message: "Please allow photo access to select an image." });
-          return;
-        }
+      const hasPickerAccess = await ensureImagePickerAccess();
+      if (!hasPickerAccess) {
+        return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -197,14 +257,30 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
         quality: 0.9,
       });
 
+      if (result.canceled) {
+        return;
+      }
+
       if (!result.canceled && result.assets && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
+        if (!user?.id) {
+          setImageError({
+            visible: true,
+            message: "Login session not found. Please logout, login again, and try scan.",
+          });
+          return;
+        }
+
+        const imageAsset = await prepareImageForUpload(result.assets[0]);
         let imageResult;
         try {
-          imageResult = await uploadImageAPI(imageUri, setExtractedText);
+          setIsScanningImage(true);
+          imageResult = await uploadImageAPI(imageAsset, setExtractedText, user?.id);
         } catch (uploadError) {
           console.log('Image upload error:', uploadError);
-          setImageError({ visible: true, message: uploadError.message || "Image selected, but upload failed. Please try again." });
+          setImageError({
+            visible: true,
+            message: uploadError.message || "Image selected, but scan upload failed. Please check internet and try again.",
+          });
           return;
         }
 
@@ -215,8 +291,8 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
           setImageError({
             visible: true,
             message: hasOcrText
-              ? "Image text was read, but no table items were found. Please try a clearer image."
-              : imageResult.extractedText || "No items found in this image. Please try another image.",
+              ? "Image text was read, but no matching table items were found for your product list. Please try a clearer image or add products first."
+              : imageResult.extractedText || "No items found in this image. Please try a clearer image.",
           });
           return;
         }
@@ -226,9 +302,35 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
       }
     } catch (error) {
       console.log('Gallery error:', error);
-      setImageError({ visible: true, message: "Unable to select image. Please try again." });
+      setImageError({
+        visible: true,
+        message: error?.message || "Unable to open or scan image. Please try again.",
+      });
+    } finally {
+      scanInProgressRef.current = false;
+      setIsScanningImage(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!scanRequestId) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        await handleGalleryScan();
+      } finally {
+        if (!cancelled) {
+          onScanRequestHandled?.();
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [scanRequestId, handleGalleryScan, onScanRequestHandled]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -313,11 +415,22 @@ export default function HomeScreen({ user: initialUser, onLogout, onUpdateUser, 
           data={items}
           userId={user?.id}
           storeName={user?.name}
+          onItemsChange={syncTableItems}
           onUpdateUser={updateUserHandler}
           onSuggestionsVisible={scrollToSuggestions}
           onRowInputFocus={scrollToTableRow}
         />
       </ScrollView>
+
+      <Modal transparent visible={isScanningImage} animationType="fade">
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+            <Text style={styles.loadingTitle}>Scanning image...</Text>
+            <Text style={styles.loadingText}>Table data milte hi list update ho jayegi.</Text>
+          </View>
+        </View>
+      </Modal>
 
       <CommonModal
         visible={showSuccessModal}
@@ -426,5 +539,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 34,
     paddingBottom: 150,
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  loadingCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+  },
+  loadingTitle: {
+    marginTop: 14,
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.TEXT_PRIMARY,
+  },
+  loadingText: {
+    marginTop: 6,
+    fontSize: 13,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: "center",
   },
 });

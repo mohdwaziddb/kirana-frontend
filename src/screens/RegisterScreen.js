@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ErrorPopup from "../components/ErrorPopup";
 import { COLORS, SIZES, FONTS, SHADOWS } from "../constants/theme";
 import { BASE_URL } from "../services/baseUrl";
+import { APP_VERSION } from "../services/appVersion";
 
 export default function RegisterScreen({ navigation, onLogin }) {
   const [name, setName] = useState("");
@@ -97,7 +98,7 @@ export default function RegisterScreen({ navigation, onLogin }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ identifier: trimmedEmail, password }),
+        body: JSON.stringify({ identifier: trimmedEmail, password, appVersion: APP_VERSION }),
       });
 
       const loginData = await loginResponse.json();
@@ -105,6 +106,7 @@ export default function RegisterScreen({ navigation, onLogin }) {
       if (loginResponse.ok) {
         await AsyncStorage.setItem("token", loginData.token);
         await AsyncStorage.setItem("user", JSON.stringify(loginData.user));
+        await AsyncStorage.setItem("appVersion", APP_VERSION);
         const expiryTime = new Date().getTime() + 5 * 60 * 1000;
         await AsyncStorage.setItem("tokenExpiry", expiryTime.toString());
         onLogin?.(loginData.user);
